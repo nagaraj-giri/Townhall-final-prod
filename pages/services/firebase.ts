@@ -1,4 +1,3 @@
-
 import * as firebaseApp from "firebase/app";
 import * as firebaseAuth from "firebase/auth";
 import { 
@@ -28,13 +27,15 @@ export const auth = getAuth(app);
 
 /**
  * Enhanced Firestore Initialization with multi-tab persistence.
- * This resolves "Could not reach Cloud Firestore backend" by allowing 
- * the app to work with local data immediately.
+ * Added 'experimentalForceLongPolling: true' to resolve connectivity issues
+ * where WebSockets might be blocked or timing out, ensuring the app remains 
+ * responsive in restricted network environments.
  */
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager()
-  })
+  }),
+  experimentalForceLongPolling: true
 });
 
 export const storage = getStorage(app);
@@ -43,7 +44,7 @@ export const functions = getFunctions(app, "europe-west1");
 export const googleProvider = new GoogleAuthProvider();
 
 export async function initFirebase() {
-  console.debug("[Town Hall] Firebase Persistent Services Connected.");
+  console.debug("[Town Hall] Firebase Persistent Services Connected (Polling Mode Enabled).");
   return Promise.resolve();
 }
 
