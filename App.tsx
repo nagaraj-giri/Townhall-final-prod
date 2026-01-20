@@ -39,36 +39,39 @@ const GOOGLE_MAPS_API_KEY = "AIzaSyAFRh0oVYKee-hPcWKoT2L05LD_XE2VT98";
 
 /**
  * Robust serialization to handle circular references and complex library objects.
- * Specifically skips Google Maps internal minified classes (Q$1, Sa, etc.) 
- * which frequently cause "Converting circular structure to JSON" errors.
+ * Specifically handles Google Maps internal classes (Q$1, Sa, etc.) by safely
+ * detecting and filtering them before JSON stringification.
  */
 const safeStringify = (obj: any) => {
   const cache = new WeakSet();
   return JSON.stringify(obj, (key, value) => {
     if (typeof value === 'object' && value !== null) {
       if (cache.has(value)) return; 
+      
       try {
-        // Broad defensive checks for browser internal objects and known Maps API circular types
-        if (
-          value instanceof Node || 
-          value.nodeType || 
-          (value.constructor && (
-            value.constructor.name === 'Mt' || 
-            value.constructor.name === 'e' || 
-            value.constructor.name.includes('Element') ||
-            value.constructor.name.includes('Map') ||
-            value.constructor.name.includes('Place') ||
-            ['Q$1', 'Sa', 'Mt', 'e'].includes(value.constructor.name)
-          )) ||
-          (value.host && (value.renderOptions || value._renderOptions)) ||
-          key === 'pickerRef' || key === 'loaderRef'
-        ) {
+        // Broad check for DOM nodes or browser-internal objects
+        if (value instanceof Node || value.nodeType) return;
+
+        // Check constructor names for minified library objects (like Google Maps)
+        const constructorName = value.constructor?.name;
+        if (constructorName && (
+          ['Q$1', 'Sa', 'Mt', 'e'].includes(constructorName) || 
+          constructorName.includes('Map') || 
+          constructorName.includes('Place') ||
+          constructorName.includes('Element')
+        )) {
           return;
         }
-      } catch (e) { 
-        return; // If accessing property throws, omit it
+
+        // Check for specific library markers
+        if (value.host && (value.renderOptions || value._renderOptions)) return;
+        if (key === 'pickerRef' || key === 'loaderRef') return;
+
+        cache.add(value);
+      } catch (e) {
+        // If property access throws (e.g. cross-origin proxy), skip this branch
+        return;
       }
-      cache.add(value);
     }
     return value;
   });

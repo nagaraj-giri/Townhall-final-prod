@@ -56,8 +56,8 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
         setForm(prev => ({ ...prev, mobile: user.phone || '' }));
       }
     }
-    setForm(prev => ({ ...prev, email: user.email || '' }));
-  }, [user.phone, user.email]);
+    setForm(prev => ({ ...prev, email: user.email || '', description: user.description || '' }));
+  }, [user.phone, user.email, user.description]);
   
   const [categories, setCategories] = useState<string[]>(user.categories || []);
   const [newTag, setNewTag] = useState('');
@@ -240,6 +240,30 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
             <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-tight">OVERALL RATING</p>
           </div>
         </div>
+
+        {/* About Us Management Section */}
+        <section className="space-y-4">
+          <div className="flex justify-between items-center px-1">
+             <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-[22px] font-bold">info</span>
+                <h3 className="text-[17px] font-black text-text-dark">About Us</h3>
+             </div>
+          </div>
+          <div className="bg-white rounded-[2.5rem] p-8 shadow-card border border-white">
+            {isEditing ? (
+              <textarea 
+                value={form.description}
+                onChange={e => setForm({...form, description: e.target.value})}
+                className="w-full px-6 py-5 bg-[#F9FAFB]/50 rounded-[1.8rem] text-[13px] border-none focus:ring-1 focus:ring-primary shadow-inner outline-none min-h-[160px] placeholder-gray-300 font-medium resize-none text-text-dark leading-relaxed"
+                placeholder="Tell potential clients about your business history, specialties, and professional values to build trust..."
+              />
+            ) : (
+              <p className="text-[13px] text-gray-500 font-medium leading-relaxed">
+                {user.description || "Describe your business here to stand out in the marketplace and build trust with new clients."}
+              </p>
+            )}
+          </div>
+        </section>
 
         {/* Gallery Section */}
         <section className="space-y-4">

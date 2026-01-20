@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
   
-  <!-- Favicon and Bookmark Icon - Top Priority -->
+  <!-- Favicon and Bookmark Icon -->
   <link rel="icon" type="image/png" href="https://i.postimg.cc/mD8z7DqZ/townhall-logo.png?v=5" />
   <link rel="shortcut icon" type="image/png" href="https://i.postimg.cc/mD8z7DqZ/townhall-logo.png?v=5" />
   <link rel="apple-touch-icon" sizes="180x180" href="https://i.postimg.cc/mD8z7DqZ/townhall-logo.png?v=5" />
@@ -18,11 +18,15 @@
   <meta name="application-name" content="Town Hall">
   <meta name="theme-color" content="#5B3D9D">
 
+  <!-- Google Fonts Preconnect -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;900&display=swap" rel="stylesheet"/>
   
-  <!-- Comprehensive Icon Support: Google Material Symbols and all variants of Material Icons -->
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL,GRAD@100..700,0..1,-25..100&display=swap" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Outlined|Material+Icons+Two+Tone|Material+Icons+Round|Material+Icons+Sharp" rel="stylesheet"/>
+  <!-- Comprehensive Icon Support: Google Material Symbols and Material Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-25..100&display=block" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons|Material+Icons+Outlined|Material+Icons+Two+Tone|Material+Icons+Round|Material+Icons+Sharp&display=block" rel="stylesheet" />
   
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
   <script>
@@ -54,9 +58,13 @@
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     
-    /* Material Symbols Customization */
-    .material-symbols-outlined {
-      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    /* Material Icons and Symbols Base Styling */
+    .material-symbols-outlined,
+    .material-icons,
+    .material-icons-outlined,
+    .material-icons-two-tone,
+    .material-icons-round,
+    .material-icons-sharp {
       display: inline-block;
       line-height: 1;
       text-transform: none;
@@ -64,7 +72,22 @@
       word-wrap: normal;
       white-space: nowrap;
       direction: ltr;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      -moz-osx-font-smoothing: grayscale;
+      font-feature-settings: 'liga';
     }
+
+    /* Specific Font Families to ensure correct loading */
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .material-icons { font-family: 'Material Icons'; }
+    .material-icons-outlined { font-family: 'Material Icons Outlined'; }
+    .material-icons-two-tone { font-family: 'Material Icons Two Tone'; }
+    .material-icons-round { font-family: 'Material Icons Round'; }
+    .material-icons-sharp { font-family: 'Material Icons Sharp'; }
 
     .fill-1 { font-variation-settings: 'FILL' 1; }
     
