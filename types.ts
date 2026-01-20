@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 
 export enum UserRole {
@@ -140,8 +141,8 @@ declare global {
   interface Window {
     google: any;
     // The environment provides a global aistudio object.
-    // Fix: Removed 'readonly' modifier to ensure consistency with base definitions and avoid merging conflict.
-    aistudio: AIStudio;
+    // Fix: Added 'readonly' modifier to match environment definitions and resolve identical modifiers error.
+    readonly aistudio: AIStudio;
   }
   
   namespace JSX {

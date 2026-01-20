@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -35,21 +36,14 @@ const COLLECTIONS = {
   BANNERS: 'banners',
   SETTINGS: 'settings',
   REVIEWS: 'reviews',
-  PROVIDER_REQUESTS: 'provider_requests'
+  PROVIDER_REQUESTS: 'provider_requests',
+  BROADCASTS: 'broadcasts'
 };
 
 export const dataService = {
   init: async () => {
-    if (!isFirebaseConfigured) {
-      console.warn("[DataService] Cloud Services key missing. App will run in limited mode.");
-      return;
-    }
-    try {
-      await getDoc(doc(db, COLLECTIONS.SETTINGS, 'global'));
-      console.log("[DataService] Connected to Firestore (Modular).");
-    } catch (err: any) {
-      console.error("[DataService] Connection Error:", err.message);
-    }
+    if (!isFirebaseConfigured) return;
+    getDoc(doc(db, COLLECTIONS.SETTINGS, 'global')).catch(() => {});
   },
 
   // USER OPS
@@ -60,9 +54,7 @@ export const dataService = {
         const data = docSnap.data() as User;
         return {
           ...data,
-          services: Array.isArray(data.services) ? data.services : [],
-          categories: Array.isArray(data.categories) ? data.categories : [],
-          gallery: Array.isArray(data.gallery) ? data.gallery : []
+          id: docSnap.id
         };
       }
       return null;
@@ -71,19 +63,19 @@ export const dataService = {
 
   saveUser: async (user: User) => {
     try { await setDoc(doc(db, COLLECTIONS.USERS, user.id), user, { merge: true }); } 
-    catch (e) { console.error("Save User Error:", e); }
+    catch (e) {}
   },
 
   getUsers: async (): Promise<User[]> => {
     try {
       const querySnapshot = await getDocs(collection(db, COLLECTIONS.USERS));
-      return querySnapshot.docs.map(doc => doc.data() as User);
+      return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
     } catch (err) { return []; }
   },
 
   listenToUsers: (callback: (users: User[]) => void): Unsubscribe => {
     return onSnapshot(collection(db, COLLECTIONS.USERS), (snapshot) => {
-      callback(snapshot.docs.map(doc => doc.data() as User));
+      callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as User)));
     });
   },
 
@@ -96,27 +88,27 @@ export const dataService = {
     try {
       const q = query(collection(db, COLLECTIONS.RFQS), orderBy('createdAt', 'desc'));
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => doc.data() as RFQ);
+      return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as RFQ));
     } catch (err) { return []; }
   },
 
   listenToRFQs: (callback: (rfqs: RFQ[]) => void): Unsubscribe => {
     const q = query(collection(db, COLLECTIONS.RFQS), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (snapshot) => {
-      callback(snapshot.docs.map(doc => doc.data() as RFQ));
+      callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as RFQ)));
     });
   },
 
   listenToRFQById: (id: string, callback: (rfq: RFQ | null) => void): Unsubscribe => {
     return onSnapshot(doc(db, COLLECTIONS.RFQS, id), (snapshot) => {
-      callback(snapshot.exists() ? (snapshot.data() as RFQ) : null);
+      callback(snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as RFQ) : null);
     });
   },
 
   getRFQById: async (id: string): Promise<RFQ | null> => {
     try {
       const docSnap = await getDoc(doc(db, COLLECTIONS.RFQS, id));
-      return docSnap.exists() ? (docSnap.data() as RFQ) : null;
+      return docSnap.exists() ? ({ ...docSnap.data(), id: docSnap.id } as RFQ) : null;
     } catch (err) { return null; }
   },
 
@@ -133,13 +125,13 @@ export const dataService = {
   getQuotes: async (): Promise<Quote[]> => {
     try {
       const querySnapshot = await getDocs(collection(db, COLLECTIONS.QUOTES));
-      return querySnapshot.docs.map(doc => doc.data() as Quote);
+      return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Quote));
     } catch (err) { return []; }
   },
 
   listenToQuotes: (callback: (quotes: Quote[]) => void): Unsubscribe => {
     return onSnapshot(collection(db, COLLECTIONS.QUOTES), (snapshot) => {
-      callback(snapshot.docs.map(doc => doc.data() as Quote));
+      callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Quote)));
     });
   },
 
@@ -147,42 +139,31 @@ export const dataService = {
     try {
       const q = query(collection(db, COLLECTIONS.QUOTES), where('rfqId', '==', rfqId));
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => doc.data() as Quote);
+      return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Quote));
     } catch (err) { return []; }
   },
 
   listenToQuotesByRFQ: (rfqId: string, callback: (quotes: Quote[]) => void): Unsubscribe => {
     const q = query(collection(db, COLLECTIONS.QUOTES), where('rfqId', '==', rfqId), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (snapshot) => {
-      callback(snapshot.docs.map(d => d.data() as Quote));
+      callback(snapshot.docs.map(d => ({ ...d.data(), id: d.id } as Quote)));
     });
   },
 
   saveQuote: async (quote: Quote) => {
     try {
       await setDoc(doc(db, COLLECTIONS.QUOTES, quote.id), quote, { merge: true });
-      
-      // Update RFQ count and status automatically
       const rfqRef = doc(db, COLLECTIONS.RFQS, quote.rfqId);
       const rfqSnap = await getDoc(rfqRef);
-      
       if (rfqSnap.exists()) {
         const rfqData = rfqSnap.data() as RFQ;
         const qCountQuery = query(collection(db, COLLECTIONS.QUOTES), where('rfqId', '==', quote.rfqId));
         const quotesSnapshot = await getDocs(qCountQuery);
-        
         const updates: any = { quotesCount: quotesSnapshot.size };
-        
-        // TRANSITION: OPEN -> ACTIVE upon first quote
-        if (rfqData.status === 'OPEN' && quotesSnapshot.size > 0) {
-          updates.status = 'ACTIVE';
-        }
-        
+        if (rfqData.status === 'OPEN' && quotesSnapshot.size > 0) updates.status = 'ACTIVE';
         await updateDoc(rfqRef, updates);
       }
-    } catch (e) {
-      console.error("Error saving quote/updating RFQ status:", e);
-    }
+    } catch (e) {}
   },
 
   // NOTIFS
@@ -190,21 +171,19 @@ export const dataService = {
     try {
       const q = query(collection(db, COLLECTIONS.NOTIFS), where('userId', '==', userId), orderBy('timestamp', 'desc'));
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => doc.data() as AppNotification);
+      return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as AppNotification));
     } catch (err) { return []; }
   },
 
   listenToNotifications: (userId: string, callback: (notifs: AppNotification[]) => void): Unsubscribe => {
     const q = query(collection(db, COLLECTIONS.NOTIFS), where('userId', '==', userId), orderBy('timestamp', 'desc'));
     return onSnapshot(q, (snapshot) => {
-      callback(snapshot.docs.map(doc => doc.data() as AppNotification));
+      callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as AppNotification)));
     });
   },
 
   markNotificationAsRead: async (notifId: string) => {
-    try {
-      await updateDoc(doc(db, COLLECTIONS.NOTIFS, notifId), { isRead: true });
-    } catch (e) {}
+    try { await updateDoc(doc(db, COLLECTIONS.NOTIFS, notifId), { isRead: true }); } catch (e) {}
   },
 
   markAllNotificationsAsRead: async (userId: string) => {
@@ -217,17 +196,127 @@ export const dataService = {
     } catch (e) {}
   },
 
-  // SYSTEM
+  // BROADCAST OPS
+  createBroadcast: async (title: string, message: string, targetRole: 'ALL' | 'CUSTOMER' | 'PROVIDER', actionUrl: string = '/') => {
+    const users = await dataService.getUsers();
+    const recipients = users.filter(u => targetRole === 'ALL' || u.role === targetRole);
+    const broadcastId = `bcast_${Date.now()}`;
+    const batch = writeBatch(db);
+
+    // 1. Create Master Broadcast Record
+    const masterRef = doc(db, COLLECTIONS.BROADCASTS, broadcastId);
+    batch.set(masterRef, {
+      id: broadcastId,
+      title,
+      message,
+      targetRole,
+      actionUrl,
+      timestamp: new Date().toISOString(),
+      sentToCount: recipients.length
+    });
+
+    // 2. Create Individual Notifications
+    recipients.forEach(u => {
+      const notifId = `broadcast_${broadcastId}_${u.id}`;
+      const notifRef = doc(db, COLLECTIONS.NOTIFS, notifId);
+      batch.set(notifRef, {
+        id: notifId,
+        broadcastId: broadcastId, // Linked for summary metrics
+        userId: u.id,
+        title: `📢 ${title}`,
+        message,
+        timestamp: new Date().toISOString(),
+        isRead: false,
+        type: 'INFO',
+        targetRole: u.role,
+        actionUrl: actionUrl || '/'
+      });
+    });
+
+    await batch.commit();
+  },
+
+  getBroadcasts: async (): Promise<any[]> => {
+    try {
+      const q = query(collection(db, COLLECTIONS.BROADCASTS), orderBy('timestamp', 'desc'));
+      const querySnapshot = await getDocs(q);
+      const broadcasts = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      
+      // Enrich with real-time stats from notifications
+      const enriched = await Promise.all(broadcasts.map(async (b) => {
+        const nQuery = query(collection(db, COLLECTIONS.NOTIFS), where('broadcastId', '==', b.id));
+        const nSnapshot = await getDocs(nQuery);
+        const openedCount = nSnapshot.docs.filter(d => d.data().isRead === true).length;
+        return {
+          ...b,
+          openedCount
+        };
+      }));
+      
+      return enriched;
+    } catch (err) { return []; }
+  },
+
+  // REVIEWS
+  getAllReviews: async (): Promise<Review[]> => {
+    try {
+      const q = query(collection(db, COLLECTIONS.REVIEWS), orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Review));
+    } catch (err) { return []; }
+  },
+
+  listenToAllReviews: (callback: (reviews: Review[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.REVIEWS), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Review)));
+    });
+  },
+
+  deleteReview: async (id: string) => {
+    try { await deleteDoc(doc(db, COLLECTIONS.REVIEWS, id)); } catch (e) {}
+  },
+
+  getReviews: async (providerId: string): Promise<Review[]> => {
+    try {
+      const q = query(collection(db, COLLECTIONS.REVIEWS), where('providerId', '==', providerId), orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Review));
+    } catch (err) { return []; }
+  },
+
+  getReviewByRFQ: async (rfqId: string): Promise<Review | null> => {
+    try {
+      const q = query(collection(db, COLLECTIONS.REVIEWS), where('rfqId', '==', rfqId));
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) return ({ ...querySnapshot.docs[0].data(), id: querySnapshot.docs[0].id } as Review);
+      return null;
+    } catch (err) { return null; }
+  },
+
+  listenToReviewsByProvider: (providerId: string, callback: (reviews: Review[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.REVIEWS), where('providerId', '==', providerId), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Review)));
+    });
+  },
+
+  saveReview: async (review: Review) => {
+    try { await setDoc(doc(db, COLLECTIONS.REVIEWS, review.id), review, { merge: true }); }
+    catch (e) {}
+  },
+
+  // SYSTEM OPS
   getCategories: async (): Promise<ServiceCategory[]> => {
     try {
       const querySnapshot = await getDocs(collection(db, COLLECTIONS.CATS));
-      return querySnapshot.docs.map(doc => doc.data() as ServiceCategory);
+      return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as ServiceCategory));
     } catch (err) { return []; }
   },
 
   listenToCategories: (callback: (cats: ServiceCategory[]) => void): Unsubscribe => {
     return onSnapshot(collection(db, COLLECTIONS.CATS), (snapshot) => {
-      callback(snapshot.docs.map(doc => doc.data() as ServiceCategory));
+      callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as ServiceCategory)));
     });
   },
 
@@ -237,10 +326,6 @@ export const dataService = {
       categories.forEach(cat => batch.set(doc(db, COLLECTIONS.CATS, cat.id), cat, { merge: true }));
       await batch.commit();
     } catch (e) {}
-  },
-
-  deleteCategory: async (id: string) => {
-    try { await deleteDoc(doc(db, COLLECTIONS.CATS, id)); } catch (e) {}
   },
 
   getSettings: async (): Promise<any> => {
@@ -255,69 +340,24 @@ export const dataService = {
     catch (e) {}
   },
 
-  getRFQsForProvider: async (provider: User): Promise<RFQ[]> => {
-    const all = await dataService.getRFQs();
-    if (!provider.services || provider.services.length === 0) return [];
-    return all.filter(r => provider.services!.includes(r.service) && (r.status === 'OPEN' || r.status === 'ACTIVE'));
-  },
-  
-  getReviews: async (providerId: string): Promise<Review[]> => {
-    try {
-      const q = query(collection(db, COLLECTIONS.REVIEWS), where('providerId', '==', providerId), orderBy('createdAt', 'desc'));
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => doc.data() as Review);
-    } catch (err) { return []; }
-  },
-
-  getReviewByRFQ: async (rfqId: string): Promise<Review | null> => {
-    try {
-      const q = query(collection(db, COLLECTIONS.REVIEWS), where('rfqId', '==', rfqId));
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) return querySnapshot.docs[0].data() as Review;
-      return null;
-    } catch (err) { return null; }
-  },
-
-  listenToReviewsByProvider: (providerId: string, callback: (reviews: Review[]) => void): Unsubscribe => {
-    const q = query(collection(db, COLLECTIONS.REVIEWS), where('providerId', '==', providerId), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snapshot) => {
-      callback(snapshot.docs.map(doc => doc.data() as Review));
-    });
-  },
-
-  saveReview: async (review: Review) => {
-    try { await setDoc(doc(db, COLLECTIONS.REVIEWS, review.id), review, { merge: true }); }
-    catch (e) {}
-  },
-
   getBanners: async (): Promise<any[]> => {
     try {
       const snapshot = await getDocs(collection(db, COLLECTIONS.BANNERS));
-      return snapshot.docs.map(d => d.data());
+      return snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
     } catch (e) { return []; }
-  },
-
-  listenToBanners: (callback: (banners: any[]) => void): Unsubscribe => {
-    return onSnapshot(collection(db, COLLECTIONS.BANNERS), (snapshot) => {
-      callback(snapshot.docs.map(d => d.data()));
-    });
   },
 
   saveBanners: async (banners: any[]) => {
     try {
       const batch = writeBatch(db);
-      banners.forEach(banner => batch.set(doc(db, COLLECTIONS.BANNERS, banner.id), banner, { merge: true }));
+      banners.forEach(b => { if (b.id) batch.set(doc(db, COLLECTIONS.BANNERS, b.id), b, { merge: true }); });
       await batch.commit();
     } catch (e) {}
   },
 
-  deleteBanner: async (id: string) => {
-    try { await deleteDoc(doc(db, COLLECTIONS.BANNERS, id)); } catch (e) {}
-  },
-
   listenToProviderRequests: (callback: (requests: ProviderRequest[]) => void): Unsubscribe => {
     return onSnapshot(collection(db, COLLECTIONS.PROVIDER_REQUESTS), (snapshot) => {
-      callback(snapshot.docs.map(doc => doc.data() as ProviderRequest));
+      callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as ProviderRequest)));
     });
   },
 
@@ -329,14 +369,12 @@ export const dataService = {
   getProviderRequestById: async (id: string): Promise<ProviderRequest | null> => {
     try {
       const docSnap = await getDoc(doc(db, COLLECTIONS.PROVIDER_REQUESTS, id));
-      return docSnap.exists() ? (docSnap.data() as ProviderRequest) : null;
+      return docSnap.exists() ? ({ ...docSnap.data(), id: docSnap.id } as ProviderRequest) : null;
     } catch (err) { return null; }
   },
 
   updateProviderRequestStatus: async (id: string, status: string) => {
-    try {
-      await updateDoc(doc(db, COLLECTIONS.PROVIDER_REQUESTS, id), { status });
-    } catch (e) {}
+    try { await updateDoc(doc(db, COLLECTIONS.PROVIDER_REQUESTS, id), { status }); } catch (e) {}
   },
 
   uploadImage: async (file: File | Blob, path: string): Promise<string> => {
@@ -344,8 +382,6 @@ export const dataService = {
       const storageRef = ref(storage, path);
       const snapshot = await uploadBytes(storageRef, file);
       return await getDownloadURL(snapshot.ref);
-    } catch (err) {
-      throw err;
-    }
+    } catch (err) { throw err; }
   },
 };

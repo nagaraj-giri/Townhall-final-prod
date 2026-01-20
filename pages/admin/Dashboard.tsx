@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, RFQ, UserRole, Quote } from '../../types';
@@ -15,7 +16,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Multi-stream listener for real-time dashboard updates
     const unsubUsers = dataService.listenToUsers(setAllUsers);
     const unsubRfqs = dataService.listenToRFQs(setAllRfqs);
     
@@ -88,7 +88,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
       openQueries: openQueries,
       conversion: conversionRate,
       funnel: [
-        { label: 'OPEN', value: `${getPct(funnel.open)}%`, color: 'bg-orange-400', count: funnel.open },
+        { label: 'OPENED', value: `${getPct(funnel.open)}%`, color: 'bg-orange-400', count: funnel.open },
         { label: 'ACTIVE', value: `${getPct(funnel.active)}%`, color: 'bg-blue-400', count: funnel.active },
         { label: 'ACCEPTED', value: `${getPct(funnel.accepted)}%`, color: 'bg-primary', count: funnel.accepted },
         { label: 'COMPLETED', value: `${getPct(funnel.completed)}%`, color: 'bg-accent-green', count: funnel.completed },
@@ -105,7 +105,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
   return (
     <div className="flex flex-col min-h-screen pb-32 bg-transparent">
-      {/* Header */}
       <header className="px-6 pt-12 pb-4 flex justify-between items-center">
         <div>
           <p className="text-[10px] text-text-light uppercase tracking-widest leading-none mb-1">OVERVIEW</p>
@@ -119,20 +118,31 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         </button>
       </header>
 
-      {/* Date Filters */}
-      <div className="px-6 flex gap-2 mb-6 overflow-x-auto no-scrollbar">
-        <button className="bg-primary text-white px-5 py-2.5 rounded-[1.2rem] text-[11px] shadow-btn-glow flex items-center gap-1 shrink-0">
-          Last 7 Days <span className="material-symbols-outlined text-sm">expand_more</span>
-        </button>
-        <button className="bg-white text-text-light px-6 py-2.5 rounded-[1.2rem] text-[11px] border border-white shadow-soft shrink-0">
-          This Month
-        </button>
-        <button className="bg-white text-text-light px-6 py-2.5 rounded-[1.2rem] text-[11px] border border-white shadow-soft shrink-0">
-          Custom
-        </button>
-      </div>
+      <main className="flex-1 px-6 space-y-6 overflow-y-auto no-scrollbar pb-10">
+        {/* Quick Management Shortcuts */}
+        <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
+           <div 
+            onClick={() => navigate('/admin/broadcast')}
+            className="flex-1 min-w-[140px] bg-primary rounded-[1.8rem] p-5 shadow-btn-glow active:scale-95 transition-all cursor-pointer flex flex-col justify-between h-36 border border-white/20"
+           >
+              <span className="material-symbols-outlined text-white text-3xl">campaign</span>
+              <div>
+                <p className="text-white text-[11px] font-black uppercase tracking-widest">Broadcast</p>
+                <p className="text-white/60 text-[9px] font-bold">Push updates to all</p>
+              </div>
+           </div>
+           <div 
+            onClick={() => navigate('/admin/reviews')}
+            className="flex-1 min-w-[140px] bg-white rounded-[1.8rem] p-5 shadow-card active:scale-95 transition-all cursor-pointer flex flex-col justify-between h-36 border border-white"
+           >
+              <span className="material-symbols-outlined text-[#FFD60A] text-3xl">rate_review</span>
+              <div>
+                <p className="text-text-dark text-[11px] font-black uppercase tracking-widest">Moderation</p>
+                <p className="text-gray-400 text-[9px] font-bold">Manage reviews feed</p>
+              </div>
+           </div>
+        </div>
 
-      <main className="flex-1 px-6 space-y-6">
         {/* KPI Grid */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white p-6 rounded-[2.2rem] shadow-card border border-white/50 transition-all active:scale-95">
@@ -159,33 +169,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             </div>
             <p className="text-[10px] text-text-light uppercase tracking-tight">Total Providers</p>
             <p className="text-2xl text-text-dark mt-1 font-bold">{metrics.totalProviders}</p>
-          </div>
-
-          <div className="bg-white p-6 rounded-[2.2rem] shadow-card border border-white/50 transition-all active:scale-95">
-            <div className="flex justify-between items-start mb-4">
-              <div className="w-10 h-10 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500">
-                <span className="material-symbols-outlined">radar</span>
-              </div>
-              <span className={`text-[9px] px-2 py-0.5 rounded-lg border ${metrics.queryTrend.startsWith('+') ? 'bg-accent-green/10 text-accent-green border-accent-green/5' : 'bg-accent-pink/10 text-accent-pink border-accent-pink/5'}`}>
-                {metrics.queryTrend}
-              </span>
-            </div>
-            <p className="text-[10px] text-text-light uppercase tracking-tight">Total Queries</p>
-            <p className="text-2xl text-text-dark mt-1 font-bold">{metrics.totalQueries.toLocaleString()}</p>
-          </div>
-
-          <div className="bg-white p-6 rounded-[2.2rem] shadow-card border border-white/50 transition-all active:scale-95 relative overflow-hidden">
-            <div className="absolute -top-1 -right-1 w-16 h-16 bg-secondary/5 rounded-full blur-2xl"></div>
-            <div className="flex justify-between items-start mb-4">
-              <div className="w-10 h-10 bg-yellow-50 rounded-2xl flex items-center justify-center text-secondary">
-                <span className="material-symbols-outlined">assignment</span>
-              </div>
-              {metrics.openQueries > 0 && (
-                <span className="bg-secondary text-text-dark text-[8px] px-2 py-1 rounded-lg uppercase tracking-tighter shadow-sm animate-pulse">Action</span>
-              )}
-            </div>
-            <p className="text-[10px] text-text-light uppercase tracking-tight">Open Queries</p>
-            <p className="text-2xl text-text-dark mt-1 font-bold">{metrics.openQueries}</p>
           </div>
         </div>
 
@@ -233,7 +216,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         </div>
       </main>
 
-      {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.06)] backdrop-blur-md bg-white/95">
         <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1.5 text-primary">
           <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-xl">

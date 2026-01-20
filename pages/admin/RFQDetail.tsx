@@ -85,16 +85,16 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
   return (
     <div className="flex flex-col min-h-screen bg-transparent pb-10">
       <header className="px-6 pt-12 pb-4 flex items-center bg-white shrink-0 sticky top-0 z-50 border-b border-gray-100 shadow-sm">
-        <button onClick={() => navigate(-1)} className="text-[#333333] w-10 h-10 flex items-center justify-center -ml-2 rounded-full active:bg-gray-100 transition-colors">
-          <span className="material-symbols-outlined font-black text-[22px]">arrow_back</span>
+        <button onClick={() => navigate(-1)} className="text-[#333333] w-12 h-12 flex items-center justify-center -ml-3 rounded-full active:bg-gray-100 transition-colors">
+          <span className="material-symbols-outlined font-black text-[24px]">arrow_back</span>
         </button>
         <div className="ml-2 flex-1">
           <h1 className="text-[17px] font-bold text-[#333333] leading-tight">Query {rfq.idDisplay}</h1>
           <p className="text-[11px] text-[#A0A0A0] font-medium">Created {getRelativeTime(rfq.createdAt)}</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setIsEditing(!isEditing)} className="text-primary w-10 h-10 flex items-center justify-center bg-primary/5 rounded-xl active:scale-90 transition-transform">
-            <span className="material-symbols-outlined font-black text-[20px]">{isEditing ? 'close' : 'edit'}</span>
+          <button onClick={() => setIsEditing(!isEditing)} className="text-primary w-11 h-11 flex items-center justify-center bg-primary/5 rounded-2xl active:scale-90 transition-transform">
+            <span className="material-symbols-outlined font-black text-[22px]">{isEditing ? 'close' : 'edit'}</span>
           </button>
         </div>
       </header>
@@ -102,10 +102,10 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
       <main className="flex-1 overflow-y-auto no-scrollbar pt-6 px-6 space-y-6">
         {/* Status Area */}
         <div className="space-y-4">
-          <div className="bg-white rounded-[1.5rem] p-4 shadow-sm border border-gray-100">
-            <div className="flex justify-between items-center mb-3">
+          <div className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-gray-100">
+            <div className="flex justify-between items-center mb-4">
                <p className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] ml-1">Current Status</p>
-               <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+               <span className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider ${
                   rfq.status === 'OPEN' ? 'bg-orange-50 text-orange-500' :
                   rfq.status === 'ACTIVE' ? 'bg-blue-50 text-blue-500' :
                   rfq.status === 'ACCEPTED' ? 'bg-primary/5 text-primary' :
@@ -117,7 +117,7 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
             {isEditing ? (
               <div className="relative">
                 <select 
-                  className="w-full px-5 py-4 bg-gray-50 border-none rounded-xl text-sm font-bold text-text-dark focus:ring-1 focus:ring-primary shadow-inner appearance-none transition-all"
+                  className="w-full px-5 py-4 bg-gray-50 border-none rounded-2xl text-sm font-bold text-text-dark focus:ring-1 focus:ring-primary shadow-inner appearance-none transition-all"
                   value={editForm.status}
                   onChange={e => setEditForm({...editForm, status: e.target.value as RFQStatus})}
                 >
@@ -130,37 +130,38 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
             ) : (
               <div className="flex items-center gap-2 text-[#A0A0A0] ml-1">
                  <span className="material-symbols-outlined text-[18px] font-bold">info</span>
-                 <span className="text-[11px] font-bold">Status controlled by marketplace engine and admin overrides.</span>
+                 <span className="text-[11px] font-bold">Status managed by platform core and admin overrides.</span>
               </div>
             )}
           </div>
         </div>
 
         {/* Requester Info Card */}
-        <div className="bg-white rounded-[2rem] p-6 shadow-card border border-gray-100/50 space-y-5">
-           <p className="text-[11px] font-bold text-gray-300 uppercase tracking-widest">Requester Info</p>
+        <div className="bg-white rounded-[2.2rem] p-6 shadow-card border border-gray-100/50 space-y-5">
+           <p className="text-[11px] font-bold text-gray-300 uppercase tracking-widest ml-1">Requester Info</p>
            <div className="flex items-center gap-4 cursor-pointer" onClick={() => navigate(`/admin/user/${rfq.customerId}`)}>
               <div className="relative">
                 <img src={rfq.customerAvatar} className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-sm" alt="" />
-                <div className="absolute -bottom-1 -right-1 bg-[#8BC34A] w-5 h-5 rounded-full border-2 border-white flex items-center justify-center">
-                   <span className="material-symbols-outlined text-white text-[10px] font-black">check</span>
+                <div className="absolute -bottom-1 -right-1 bg-[#8BC34A] w-6 h-6 rounded-full border-4 border-white flex items-center justify-center">
+                   <span className="material-symbols-outlined text-white text-[12px] font-black">check</span>
                 </div>
               </div>
               <div>
                 <h2 className="text-base font-bold text-[#333333]">{rfq.customerName || 'Customer'}</h2>
                 <div className="flex items-center gap-1 text-[#A0A0A0]">
-                   <span className="material-symbols-outlined text-[14px] font-bold">location_on</span>
+                   <span className="material-symbols-outlined text-[16px] font-bold">location_on</span>
                    <span className="text-[11px] font-medium">{rfq.locationName.split(',')[0]}</span>
                 </div>
               </div>
            </div>
-           {/* Visual Fix for Buttons */}
+           
+           {/* Visual Fix for action buttons in Requester Info */}
            <div className="flex gap-3 pt-2">
-              <button className="flex-1 bg-[#F2F0F9] py-3.5 rounded-2xl flex items-center justify-center gap-2 font-bold text-primary text-[13px] active:scale-95 transition-transform">
-                 <span className="material-symbols-outlined text-[18px] font-bold">call</span> Call
+              <button className="flex-1 bg-[#F2F0F9] py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-primary text-[11px] uppercase tracking-widest active:scale-[0.98] transition-transform">
+                 <span className="material-symbols-outlined text-[18px]">call</span> Call
               </button>
-              <button className="flex-1 bg-[#F2F0F9] py-3.5 rounded-2xl flex items-center justify-center gap-2 font-bold text-primary text-[13px] active:scale-95 transition-transform">
-                 <span className="material-symbols-outlined text-[18px] font-bold">mail</span> Email
+              <button className="flex-1 bg-[#F2F0F9] py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-primary text-[11px] uppercase tracking-widest active:scale-[0.98] transition-transform">
+                 <span className="material-symbols-outlined text-[18px]">mail</span> Email
               </button>
            </div>
         </div>
@@ -195,21 +196,21 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
 
         {/* Metadata grid */}
         <div className="bg-white rounded-[2rem] p-8 shadow-card border border-gray-100/50">
-          <div className="grid grid-cols-2 gap-y-7 gap-x-4">
+          <div className="grid grid-cols-2 gap-y-8 gap-x-4">
             <div>
-              <p className="text-[11px] text-[#A0A0A0] font-bold uppercase tracking-wider mb-1">Created At</p>
+              <p className="text-[10px] text-[#A0A0A0] font-bold uppercase tracking-wider mb-1.5">Created At</p>
               <p className="text-[13px] font-black text-[#333333]">{formatDateTime(rfq.createdAt)}</p>
             </div>
             <div>
-              <p className="text-[11px] text-[#A0A0A0] font-bold uppercase tracking-wider mb-1">Category</p>
+              <p className="text-[10px] text-[#A0A0A0] font-bold uppercase tracking-wider mb-1.5">Category</p>
               <p className="text-[13px] font-black text-[#333333] uppercase">{rfq.category}</p>
             </div>
             <div>
-              <p className="text-[11px] text-[#A0A0A0] font-bold uppercase tracking-wider mb-1">Quotes Received</p>
+              <p className="text-[10px] text-[#A0A0A0] font-bold uppercase tracking-wider mb-1.5">Quotes Received</p>
               <p className="text-[13px] font-black text-[#333333]">{rfq.quotesCount}</p>
             </div>
             <div>
-              <p className="text-[11px] text-[#A0A0A0] font-bold uppercase tracking-wider mb-1">Search Radius</p>
+              <p className="text-[10px] text-[#A0A0A0] font-bold uppercase tracking-wider mb-1.5">Search Radius</p>
               <p className="text-[13px] font-black text-[#333333]">{rfq.searchRadius} KM</p>
             </div>
           </div>
@@ -219,24 +220,24 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
         <div className="space-y-4 pt-4">
           <div className="flex justify-between items-center px-1">
             <h3 className="text-[18px] font-bold text-[#333333]">Proposals</h3>
-            <div className="bg-[#FFD60A] px-3 py-1 rounded-lg">
-              <span className="text-[12px] font-black text-[#333333] uppercase">{quotes.length} Total</span>
+            <div className="bg-secondary px-3 py-1 rounded-lg">
+              <span className="text-[11px] font-black text-[#333333] uppercase">{quotes.length} Total</span>
             </div>
           </div>
 
-          <div className="space-y-4 pb-10">
+          <div className="space-y-4 pb-12">
             {quotes.map((quote) => {
               const isSelected = rfq.acceptedQuoteId === quote.id;
               return (
                 <div key={quote.id} className={`bg-white rounded-[2rem] p-6 shadow-card border flex items-center justify-between transition-all ${isSelected ? 'border-primary ring-1 ring-primary/20' : 'border-gray-100/30'}`}>
                   <div className="flex items-center gap-4 cursor-pointer" onClick={() => navigate(`/admin/user/${quote.providerId}`)}>
-                    <div className="w-14 h-14 rounded-full flex items-center justify-center border border-gray-100 overflow-hidden shadow-sm">
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center border border-gray-50 overflow-hidden shadow-sm">
                       <img src={quote.providerAvatar} className="w-full h-full object-cover" alt="" />
                     </div>
                     <div>
                       <h4 className="text-[15px] font-bold text-[#333333] leading-none mb-1.5">{quote.providerName}</h4>
                       <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-[#FFD60A] text-[16px] fill-1">star</span>
+                        <span className="material-symbols-outlined text-secondary text-[16px] fill-1">star</span>
                         <p className="text-[12px] font-medium text-gray-400">
                           {quote.providerRating || 4.8}
                         </p>

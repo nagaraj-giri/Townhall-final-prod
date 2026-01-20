@@ -1,4 +1,3 @@
-
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 
@@ -10,157 +9,126 @@ const db = admin.firestore();
 const fcm = admin.messaging();
 
 /**
- * UTILITY: Centralized notification creator + Push Dispatcher.
+ * Dispatcher: Writes to Firestore (Bell Tray) and sends FCM Push
  */
-async function createNotification({ userId, title, message, type = 'INFO', actionUrl = '', role = 'USER' }) {
-  const id = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-  
-  // 1. Save to Firestore for in-app history
-  await db.collection('notifications').doc(id).set({
-    id,
-    userId,
-    title,
-    message,
-    type,
-    isRead: false,
-    timestamp: new Date().toISOString(),
-    actionUrl,
-    targetRole: role
-  });
+async function notifyUser({userId, title, message, type = 'INFO', actionUrl = ''}) {
+  if (!userId) return null;
 
-  // 2. Dispatch Real Push Notification via FCM
-  const userDoc = await db.collection('users').doc(userId).get();
-  if (userDoc.exists) {
-    const userData = userDoc.data();
-    const tokens = userData.fcmTokens || [];
+  try {
+    const notifId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
     
-    if (tokens.length > 0) {
-      const payload = {
-        notification: {
-          title: title,
-          body: message
-        },
-        data: {
-          actionUrl: actionUrl,
-          click_action: "FLUTTER_NOTIFICATION_CLICK" // Standard key for some frameworks, but actionUrl is our custom logic
-        }
-      };
+    // 1. Create document for the Bell Icon Tray
+    await db.collection('notifications').doc(notifId).set({
+      id: notifId,
+      userId: userId,
+      title: title,
+      message: message,
+      type: type,
+      isRead: false,
+      timestamp: new Date().toISOString(),
+      actionUrl: actionUrl
+    });
 
-      try {
-        const response = await fcm.sendToDevice(tokens, payload);
-        // Optional: Cleanup invalid tokens
-        response.results.forEach((result, index) => {
-          const error = result.error;
-          if (error) {
-            console.error('Failure sending notification to', tokens[index], error);
-            if (error.code === 'messaging/invalid-registration-token' || 
-                error.code === 'messaging/registration-token-not-registered') {
-              // Token is invalid, should be removed from DB
-            }
-          }
-        });
-      } catch (e) {
-        console.error("FCM dispatch error:", e);
+    // 2. Send System Push Notification via FCM
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (userDoc.exists) {
+      const userData = userDoc.data();
+      const tokens = userData.fcmTokens || [];
+      if (tokens.length > 0) {
+        const payload = {
+          notification: {title, body: message},
+          data: {actionUrl},
+          tokens: tokens
+        };
+        await fcm.sendEachForMulticast(payload);
       }
     }
+  } catch (error) {
+    console.error(`[NotificationSystem] Error for user ${userId}:`, error);
   }
+  return null;
 }
 
-// 1. ADMIN NOTIFICATIONS
-exports.onProviderRequestCreated = functions.firestore.document('provider_requests/{reqId}').onCreate(async (snap) => {
-  const req = snap.data();
-  const admins = await db.collection('users').where('role', '==', 'ADMIN').get();
-  
-  return Promise.all(admins.docs.map(doc => 
-    createNotification({
-      userId: doc.id,
-      title: "🏪 New Verification Request",
-      message: `${req.businessName} applied for verification.`,
-      type: 'URGENT',
-      actionUrl: `https://townhall-io.web.app/#/admin/provider-request/${req.id}`,
-      role: 'ADMIN'
-    })
-  ));
-});
-
-// 2. PROVIDER NOTIFICATIONS (LEADS & HIRING)
+/**
+ * TRIGGER: New Query -> Notify Matching Providers
+ */
 exports.onRFQCreated = functions.firestore.document('rfqs/{rfqId}').onCreate(async (snap) => {
   const rfq = snap.data();
-  
   const providers = await db.collection('users')
     .where('role', '==', 'PROVIDER')
     .where('services', 'array-contains', rfq.service)
     .get();
-    
-  return Promise.all(providers.docs.map(doc => 
-    createNotification({
+
+  const notifications = providers.docs.map((doc) => 
+    notifyUser({
       userId: doc.id,
-      title: "🎯 NEW LEAD MATCHED",
-      message: `Project for "${rfq.title}" near ${rfq.locationName.split(',')[0]}.`,
+      title: '🎯 NEW LEAD MATCHED',
+      message: `A client needs "${rfq.title}" near ${rfq.locationName.split(',')[0]}.`,
       type: 'SUCCESS',
-      actionUrl: `https://townhall-io.web.app/#/rfq/${rfq.id}`,
-      role: 'PROVIDER'
+      actionUrl: `/rfq/${rfq.id}`
     })
-  ));
+  );
+
+  return Promise.all(notifications);
 });
 
-exports.onQuoteAccepted = functions.firestore.document('rfqs/{rfqId}').onUpdate(async (change) => {
-  const newData = change.after.data();
-  const prevData = change.before.data();
-
-  if (newData.status === 'ACCEPTED' && prevData.status !== 'ACCEPTED' && newData.acceptedQuoteId) {
-    const quoteSnap = await db.collection('quotes').doc(newData.acceptedQuoteId).get();
-    if (quoteSnap.exists) {
-      const quote = quoteSnap.data();
-      return createNotification({
-        userId: quote.providerId,
-        title: "🏆 YOU'VE BEEN HIRED!",
-        message: `Your quote for "${newData.title}" was accepted by the client.`,
-        type: 'SUCCESS',
-        actionUrl: `https://townhall-io.web.app/#/rfq/${newData.id}`,
-        role: 'PROVIDER'
-      });
-    }
-  }
-  return null;
-});
-
-// 3. CUSTOMER NOTIFICATIONS
+/**
+ * TRIGGER: New Quote -> Notify Customer
+ */
 exports.onQuoteCreated = functions.firestore.document('quotes/{quoteId}').onCreate(async (snap) => {
   const quote = snap.data();
   const rfqSnap = await db.collection('rfqs').doc(quote.rfqId).get();
-  
   if (!rfqSnap.exists) return null;
+  
   const rfq = rfqSnap.data();
-
-  return createNotification({
+  return notifyUser({
     userId: rfq.customerId,
-    title: "💰 New Price Proposal",
-    message: `${quote.providerName} sent a quote for ${quote.price} AED.`,
+    title: '💰 NEW QUOTE RECEIVED',
+    message: `${quote.providerName} quoted ${quote.price} AED for your request.`,
     type: 'SUCCESS',
-    actionUrl: `https://townhall-io.web.app/#/rfq/${quote.rfqId}`,
-    role: 'CUSTOMER'
+    actionUrl: `/rfq/${rfq.id}`
   });
 });
 
-// 4. CHAT NOTIFICATIONS
-exports.onChatMessageCreated = functions.firestore.document('chats/{roomId}/history/{msgId}').onCreate(async (snap, context) => {
+/**
+ * TRIGGER: New Message -> Notify Recipient
+ */
+exports.onMessageCreated = functions.firestore.document('chats/{roomId}/history/{msgId}').onCreate(async (snap, context) => {
   const msg = snap.data();
   const roomId = context.params.roomId;
   const participants = roomId.split('_');
-  const recipientId = participants.find(id => id !== msg.senderId);
+  const recipientId = participants.find((id) => id !== msg.senderId);
 
   if (!recipientId) return null;
 
   const senderSnap = await db.collection('users').doc(msg.senderId).get();
-  const senderName = senderSnap.exists ? senderSnap.data().name : 'User';
+  const senderName = senderSnap.exists ? senderSnap.data().name : 'Partner';
 
-  return createNotification({
+  return notifyUser({
     userId: recipientId,
-    title: `💬 New Message from ${senderName}`,
+    title: `💬 MESSAGE FROM ${senderName.toUpperCase()}`,
     message: msg.text.length > 50 ? `${msg.text.substring(0, 50)}...` : msg.text,
     type: 'INFO',
-    actionUrl: `https://townhall-io.web.app/#/messages/${msg.senderId}`,
-    role: 'USER'
+    actionUrl: `/messages/${msg.senderId}`
   });
+});
+
+/**
+ * TRIGGER: Provider Applied -> Notify Admins
+ */
+exports.onProviderRequest = functions.firestore.document('provider_requests/{id}').onCreate(async (snap) => {
+  const req = snap.data();
+  const admins = await db.collection('users').where('role', '==', 'ADMIN').get();
+  
+  const notifications = admins.docs.map((doc) => 
+    notifyUser({
+      userId: doc.id,
+      title: '🏪 NEW BUSINESS VERIFICATION',
+      message: `${req.businessName} has applied to join Town Hall.`,
+      type: 'URGENT',
+      actionUrl: `/admin/provider-request/${snap.id}`
+    })
+  );
+
+  return Promise.all(notifications);
 });

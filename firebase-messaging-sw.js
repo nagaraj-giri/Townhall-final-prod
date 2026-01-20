@@ -5,8 +5,6 @@
 importScripts("https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js");
 
-const PROD_URL = "https://town-hall-559455195686.us-west1.run.app/";
-
 firebase.initializeApp({
   apiKey: "AIzaSyDT5SZoa9Nu6imSezlxYlBGUYycfUZPzYQ",
   authDomain: "townhall-io.firebaseapp.com",
@@ -19,41 +17,31 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  console.log("[SW] Background message received:", payload);
-  
-  const notificationTitle = payload.notification?.title || "Town Hall UAE";
+  const notificationTitle = payload.notification?.title || "Town Hall Alert";
   const notificationOptions = {
-    body: payload.notification?.body || "Update from your UAE Service Marketplace.",
-    icon: "/logo192.png", 
-    badge: "/badge.png",
+    body: payload.notification?.body || "Check your dashboard for updates.",
+    icon: "/favicon.ico", 
+    badge: "/favicon.ico",
     data: {
-      // Construct absolute URL for the action
-      actionUrl: payload.data?.actionUrl 
-        ? (payload.data.actionUrl.startsWith('http') ? payload.data.actionUrl : `${PROD_URL}#${payload.data.actionUrl}`)
-        : PROD_URL
+      actionUrl: payload.data?.actionUrl || '/'
     }
   };
-
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const actionUrl = event.notification.data?.actionUrl || PROD_URL;
+  const actionUrl = event.notification.data?.actionUrl || '/';
+  const targetUrl = `${self.location.origin}/#${actionUrl}`;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // Check if a tab with this URL is already open
-      for (let i = 0; i < windowClients.length; i++) {
-        const client = windowClients[i];
-        if (client.url.includes(actionUrl) && 'focus' in client) {
+      for (const client of windowClients) {
+        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
           return client.focus();
         }
       }
-      // Otherwise open a new tab
-      if (clients.openWindow) {
-        return clients.openWindow(actionUrl);
-      }
+      if (clients.openWindow) return clients.openWindow(targetUrl);
     })
   );
 });

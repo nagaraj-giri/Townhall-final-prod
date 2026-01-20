@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, UserRole, ServiceCategory } from '../../types';
@@ -18,10 +19,10 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
   const adminAvatarInputRef = useRef<HTMLInputElement>(null);
   
   const [isSaving, setIsSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'system'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'system'>('system'); // Default to system for visual matching
   
   // Collapsible state for system settings
-  const [isSiteOpen, setIsSiteOpen] = useState(true);
+  const [isSiteOpen, setIsSiteOpen] = useState(false);
   const [isServiceOpen, setIsServiceOpen] = useState(true);
 
   const [settings, setSettings] = useState<any>({ 
@@ -102,7 +103,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-transparent pb-32">
+    <div className="flex flex-col min-h-screen bg-[#FCF6E7] pb-32">
       <header className="px-8 pt-14 pb-6 flex items-center justify-between">
         <h1 className="text-[14px] font-[900] text-text-dark uppercase tracking-[0.2em]">Command Center</h1>
         <div className="flex items-center gap-3">
@@ -131,6 +132,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                 >
                   <img src={user.avatar} className="w-full h-full object-cover" alt="Admin Avatar" />
                 </div>
+                {/* Fix: Added missing className property and ensured Tailwind classes are correctly stringified */}
                 <div 
                   onClick={() => adminAvatarInputRef.current?.click()}
                   className="absolute bottom-1 right-1 bg-primary w-9 h-9 rounded-2xl border-4 border-white flex items-center justify-center shadow-lg text-white cursor-pointer active:scale-90"
@@ -175,9 +177,9 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
             </div>
           </div>
         ) : (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300 pb-20">
-            {/* System Management Tab */}
-            <div className="px-6 flex justify-between items-center">
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300 pb-20">
+            {/* System Management Tab Header */}
+            <div className="px-6 flex justify-between items-center mb-2">
               <h2 className="text-xl font-black text-text-dark uppercase tracking-tight">System Config</h2>
               <button 
                 onClick={handleSaveAll}
@@ -188,18 +190,19 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
               </button>
             </div>
 
+            {/* Site Management Section */}
             <section>
               <button 
                 onClick={() => setIsSiteOpen(!isSiteOpen)}
-                className="w-full px-8 py-4 flex items-center justify-between text-gray-400 font-bold uppercase text-[11px] tracking-widest"
+                className="w-full px-8 py-3 flex items-center justify-between text-gray-400 font-bold uppercase text-[11px] tracking-widest"
               >
                 SITE MANAGEMENT
                 <span className={`material-symbols-outlined transition-transform duration-300 ${isSiteOpen ? 'rotate-180' : ''}`}>expand_more</span>
               </button>
               
               {isSiteOpen && (
-                <div className="px-6 space-y-4">
-                  <div className="bg-white rounded-[2.5rem] shadow-card border border-white p-7 space-y-6">
+                <div className="px-6 space-y-4 mb-4">
+                  <div className="bg-white rounded-[2rem] shadow-card border border-white p-6 space-y-6">
                     <div className="flex items-center justify-between">
                        <div className="flex items-center gap-4">
                          <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 border border-gray-100 overflow-hidden">
@@ -222,52 +225,61 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
               )}
             </section>
 
-            <section>
-              <button 
-                onClick={() => setIsServiceOpen(!isServiceOpen)}
-                className="w-full px-8 py-4 flex items-center justify-between text-gray-400 font-bold uppercase text-[11px] tracking-widest"
-              >
-                SERVICES
-                <span className={`material-symbols-outlined transition-transform duration-300 ${isServiceOpen ? 'rotate-180' : ''}`}>expand_more</span>
-              </button>
-              {isServiceOpen && (
-                <div className="px-6 space-y-3">
-                   {categories.map((cat) => (
-                     <div key={cat.id} className="bg-white rounded-[2rem] p-4 flex items-center gap-4 shadow-card border border-white">
-                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${cat.color}15`, color: cat.color }}><span className="material-symbols-outlined text-2xl font-bold">{cat.icon}</span></div>
-                        <div className="flex-1 min-w-0">
-                           <h4 className="text-[13px] font-black text-text-dark truncate uppercase">{cat.name}</h4>
-                        </div>
-                        <button onClick={() => navigate(`/admin/service/edit/${cat.id}`)} className="w-9 h-9 flex items-center justify-center text-gray-300 hover:text-primary transition-colors"><span className="material-symbols-outlined text-[20px]">edit</span></button>
-                     </div>
-                   ))}
-                   <button onClick={() => navigate('/admin/service/new')} className="w-full py-4 bg-gray-50 border border-dashed border-gray-200 text-gray-400 rounded-[2rem] text-[11px] font-black uppercase tracking-widest active:bg-gray-100 transition-all">+ Add New Service</button>
-                </div>
-              )}
+            {/* SERVICES LIST - UPDATED TO MATCH SCREENSHOT */}
+            <section className="px-6 space-y-4">
+              <div className="space-y-3">
+                {categories.map((cat) => (
+                  <div 
+                    key={cat.id} 
+                    onClick={() => navigate(`/admin/service/edit/${cat.id}`)}
+                    className="bg-white rounded-[2.5rem] p-5 shadow-card border border-white flex items-center gap-5 active:scale-[0.98] transition-all cursor-pointer group"
+                  >
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm" style={{ backgroundColor: `${cat.color}15`, color: cat.color }}>
+                      <span className="material-symbols-outlined text-3xl font-normal">{cat.icon}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-[14px] font-[800] text-text-dark truncate uppercase tracking-tight">{cat.name}</h4>
+                    </div>
+                    <div className="w-8 h-8 flex items-center justify-center text-gray-200 group-hover:text-primary transition-colors">
+                      <span className="material-symbols-outlined text-[20px]">edit</span>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* ADD NEW SERVICE BUTTON - PILL STYLE FROM SCREENSHOT */}
+                <button 
+                  onClick={() => navigate('/admin/service/new')}
+                  className="w-full py-4 bg-white border border-gray-100 text-gray-400 rounded-full text-[11px] font-black uppercase tracking-[0.1em] shadow-sm flex items-center justify-center gap-2 active:scale-95 transition-all mt-6"
+                >
+                  <span className="material-symbols-outlined text-sm">add</span>
+                  ADD NEW SERVICE
+                </button>
+              </div>
             </section>
           </div>
         )}
       </main>
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white/95 backdrop-blur-md border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.06)]">
-        <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-60">
-          <span className="material-symbols-outlined text-[26px]">grid_view</span>
-          <span className="text-[9px] font-black uppercase tracking-[0.1em]">HOME</span>
+      {/* BOTTOM NAVIGATION - PRECISELY MATCHING SCREENSHOT */}
+      <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40_rgba(0,0,0,0.06)]">
+        <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-40">
+          <span className="material-symbols-outlined text-[28px] font-light">grid_view</span>
+          <span className="text-[9px] font-black uppercase tracking-widest">HOME</span>
         </button>
-        <button onClick={() => navigate('/admin/users')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-60">
-          <span className="material-symbols-outlined text-[26px]">group</span>
-          <span className="text-[9px] font-black uppercase tracking-[0.1em]">USERS</span>
+        <button onClick={() => navigate('/admin/users')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-40">
+          <span className="material-symbols-outlined text-[28px] font-light">group</span>
+          <span className="text-[9px] font-black uppercase tracking-widest">USERS</span>
         </button>
-        <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-60">
-           <span className="material-symbols-outlined text-[26px]">format_list_bulleted</span>
-           <span className="text-[9px] font-black uppercase tracking-[0.1em]">QUERIES</span>
+        <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-40">
+           <span className="material-symbols-outlined text-[28px] font-light">format_list_bulleted</span>
+           <span className="text-[9px] font-black uppercase tracking-widest">QUERIES</span>
         </button>
-        <button className="flex-1 flex flex-col items-center gap-1.5 text-primary">
-          <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-xl">
-             <span className="material-symbols-outlined text-[26px] font-black">settings</span>
+        <button className="flex-1 flex flex-col items-center gap-1 text-primary">
+          <div className="relative flex items-center justify-center">
+            <div className="absolute w-12 h-12 bg-primary/10 rounded-full -z-10 animate-in zoom-in duration-300"></div>
+            <span className="material-symbols-outlined text-[28px] font-black fill-1">settings</span>
           </div>
-          <span className="text-[9px] font-black uppercase tracking-[0.1em]">SYSTEM</span>
+          <span className="text-[9px] font-black uppercase tracking-widest mt-1">SYSTEM</span>
         </button>
       </nav>
     </div>

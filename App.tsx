@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, createContext, useContext, useMemo } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { APIProvider } from '@vis.gl/react-google-maps';
@@ -31,6 +32,9 @@ import AdminRFQDetail from './pages/admin/RFQDetail';
 import AdminCategories from './pages/admin/Categories';
 import AdminServiceEditor from './pages/admin/ServiceEditor';
 import ProviderRequestDetail from './pages/admin/ProviderRequestDetail';
+import AdminBroadcastManager from './pages/admin/BroadcastManager';
+import AdminBroadcastListing from './pages/admin/BroadcastListing';
+import AdminReviewModeration from './pages/admin/ReviewModeration';
 
 const GOOGLE_MAPS_API_KEY = "AIzaSyAFRh0oVYKee-hPcWKoT2L05LD_XE2VT98";
 
@@ -89,14 +93,15 @@ const NotificationsOverlay: React.FC<{
       await dataService.markNotificationAsRead(notif.id);
     }
     if (notif.actionUrl) {
-      navigate(notif.actionUrl);
+      const target = notif.actionUrl.includes('#') ? notif.actionUrl.split('#')[1] : notif.actionUrl;
+      navigate(target);
       onClose();
     }
   };
 
   const handleMarkAllRead = async () => {
     await dataService.markAllNotificationsAsRead(user.id);
-    showToast("Inbox cleared", "success");
+    showToast("Notifications cleared", "success");
   };
 
   if (!isOpen) return null;
@@ -113,7 +118,7 @@ const NotificationsOverlay: React.FC<{
             <h2 className="text-xl font-bold text-text-dark uppercase">Alerts</h2>
           </div>
           {notifications.length > 0 && (
-            <button onClick={handleMarkAllRead} className="text-[10px] font-bold text-primary uppercase">Clear</button>
+            <button onClick={handleMarkAllRead} className="text-[10px] font-bold text-primary uppercase">Clear All</button>
           )}
         </header>
         <main className="flex-1 overflow-y-auto p-5 space-y-4 no-scrollbar bg-gray-50/30">
@@ -122,19 +127,20 @@ const NotificationsOverlay: React.FC<{
               <div 
                 key={notif.id} 
                 onClick={() => handleAction(notif)}
-                className={`p-4 rounded-[1.5rem] bg-white border transition-all cursor-pointer ${notif.isRead ? 'opacity-60' : 'border-primary/20 shadow-sm'}`}
+                className={`p-5 rounded-[1.8rem] bg-white border transition-all cursor-pointer ${notif.isRead ? 'opacity-50' : 'border-primary/20 shadow-sm'}`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <h4 className="text-[12px] font-bold text-text-dark uppercase">{notif.title}</h4>
                   {!notif.isRead && <div className="w-2 h-2 bg-accent-pink rounded-full animate-pulse"></div>}
                 </div>
                 <p className="text-[11px] text-gray-500 font-medium leading-relaxed">{notif.message}</p>
+                <p className="text-[9px] text-gray-300 mt-2 font-black uppercase">{new Date(notif.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
               </div>
             ))
           ) : (
             <div className="py-20 text-center opacity-30">
               <span className="material-symbols-outlined text-5xl">notifications_off</span>
-              <p className="text-[10px] font-bold uppercase tracking-widest mt-4">Empty</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest mt-4">No active alerts</p>
             </div>
           )}
         </main>
@@ -164,41 +170,24 @@ const App: React.FC = () => {
         if (stored) {
           try {
             const parsed = JSON.parse(stored);
-            const fresh = await dataService.getUserById(parsed.id);
-            if (fresh) {
-              setUser(fresh);
-              localStorage.setItem('townhall_user', safeStringify(fresh));
-            }
-          } catch (e) {
-            localStorage.removeItem('townhall_user');
-          }
+            // Non-blocking fetch for the user
+            dataService.getUserById(parsed.id).then((fresh) => {
+              if (fresh) {
+                setUser(fresh);
+                localStorage.setItem('townhall_user', safeStringify(fresh));
+              }
+            }).catch(() => {
+              // Fallback to local if fetch fails
+              setUser(parsed);
+            });
+            // Immediately use stored while waiting
+            setUser(parsed);
+          } catch (e) { localStorage.removeItem('townhall_user'); }
         }
-      } catch (err) {
-        console.error("Bootstrap error:", err);
-      } finally {
-        setIsReady(true);
-      }
+      } finally { setIsReady(true); }
     };
     bootstrap();
   }, []);
-
-  // Push Notifications Setup: Triggered upon user identification
-  useEffect(() => {
-    if (user) {
-      // Register device for background push
-      pushNotificationService.init(user);
-      
-      // Setup listener for foreground notifications
-      const unsubPush = pushNotificationService.listenForForegroundMessages((payload) => {
-        // Map FCM foreground message to the application's toast notification system
-        const title = payload.notification?.title || "New Update";
-        const body = payload.notification?.body || "";
-        showToast(`${title}: ${body}`, "info");
-      });
-      
-      return () => unsubPush();
-    }
-  }, [user?.id]);
 
   useEffect(() => {
     if (!user) {
@@ -206,17 +195,29 @@ const App: React.FC = () => {
       setChatUnreadCount(0);
       return;
     }
+
+    pushNotificationService.init(user);
+    const unsubPush = pushNotificationService.listenForForegroundMessages((payload) => {
+      const title = payload.notification?.title || "Update";
+      const body = payload.notification?.body || "";
+      showToast(`${title}: ${body}`, "info");
+    });
+
     const unsubNotifs = dataService.listenToNotifications(user.id, (notifs) => {
       setNotifications(notifs);
-      const unread = notifs.filter(n => !n.isRead);
-      if (unread.length > 0) {
-        AlertsEngine.dispatch(unread[0], user.role, showToast);
+      const now = new Date().getTime();
+      const fresh = notifs.filter(n => !n.isRead && (now - new Date(n.timestamp).getTime() < 15000));
+      if (fresh.length > 0) {
+        AlertsEngine.dispatch(fresh[0], user.role, showToast);
       }
     });
+
     const unsubChatCount = ChatService.listenToTotalUnreadMessages(user.id, setChatUnreadCount);
+
     return () => {
       unsubNotifs();
       unsubChatCount();
+      unsubPush();
     };
   }, [user?.id, user?.role]);
 
@@ -232,24 +233,18 @@ const App: React.FC = () => {
 
   const unreadCount = useMemo(() => notifications.filter(n => !n.isRead).length, [notifications]);
 
-  if (!isReady) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
-  }
+  if (!isReady) return null;
 
   return (
-    <APIProvider apiKey={GOOGLE_MAPS_API_KEY} solutionChannel='GMP_devsite_samples_v3_rgmautocomplete'>
+    <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
       <AppContext.Provider value={{ showToast, unreadCount, chatUnreadCount, toggleNotifications: setIsNotifOpen }}>
         <HashRouter>
           <div className="max-w-md mx-auto min-h-screen relative overflow-x-hidden">
             {toast && (
               <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[4000] w-[90%] max-w-sm animate-in slide-in-from-top duration-500">
-                <div className={`p-4 rounded-[2rem] shadow-xl flex items-center gap-4 bg-white/95 backdrop-blur-xl border ${toast.type === 'success' ? 'border-accent-green/20' : toast.type === 'error' ? 'border-accent-pink/20' : 'border-primary/20'}`}>
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${toast.type === 'success' ? 'bg-accent-green' : toast.type === 'error' ? 'bg-accent-pink' : 'bg-primary'} text-white`}>
-                    <span className="material-symbols-outlined text-[18px]">{toast.type === 'success' ? 'check' : toast.type === 'error' ? 'priority_high' : 'info'}</span>
+                <div className={`p-4 rounded-[2rem] shadow-xl flex items-center gap-4 bg-white/95 backdrop-blur-xl border ${toast.type === 'success' ? 'border-accent-green/20' : 'border-primary/20'}`}>
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${toast.type === 'success' ? 'bg-accent-green' : 'bg-primary'} text-white`}>
+                    <span className="material-symbols-outlined text-[18px]">{toast.type === 'success' ? 'check' : 'notifications'}</span>
                   </div>
                   <p className="text-[13px] font-bold text-text-dark">{toast.message}</p>
                 </div>
@@ -273,6 +268,9 @@ const App: React.FC = () => {
               <Route path="/admin/service/new" element={user?.role === UserRole.ADMIN ? <AdminServiceEditor /> : <Navigate to="/" />} />
               <Route path="/admin/service/edit/:catId" element={user?.role === UserRole.ADMIN ? <AdminServiceEditor /> : <Navigate to="/" />} />
               <Route path="/admin/provider-request/:id" element={user?.role === UserRole.ADMIN ? <ProviderRequestDetail /> : <Navigate to="/" />} />
+              <Route path="/admin/broadcast" element={user?.role === UserRole.ADMIN ? <AdminBroadcastManager user={user} /> : <Navigate to="/" />} />
+              <Route path="/admin/broadcasts" element={user?.role === UserRole.ADMIN ? <AdminBroadcastListing user={user} /> : <Navigate to="/" />} />
+              <Route path="/admin/reviews" element={user?.role === UserRole.ADMIN ? <AdminReviewModeration user={user} /> : <Navigate to="/" />} />
               <Route path="/rfq/:id" element={user ? (user.role === UserRole.ADMIN ? <AdminRFQDetail user={user} /> : user.role === UserRole.PROVIDER ? <ProviderRFQDetail user={user} /> : <CustomerRFQDetail user={user} />) : <Navigate to="/login" />} />
               <Route path="/profile" element={user ? (user.role === UserRole.ADMIN ? <AdminProfile user={user} onLogout={handleLogout} /> : user.role === UserRole.PROVIDER ? <ProviderProfile user={user} onLogout={handleLogout} /> : <CustomerProfile user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} />
             </Routes>

@@ -1,6 +1,11 @@
+
 import * as firebaseApp from "firebase/app";
 import * as firebaseAuth from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager 
+} from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getFunctions } from "firebase/functions";
 
@@ -20,14 +25,25 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+/**
+ * Enhanced Firestore Initialization with multi-tab persistence.
+ * This resolves "Could not reach Cloud Firestore backend" by allowing 
+ * the app to work with local data immediately.
+ */
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+});
+
 export const storage = getStorage(app);
 export const functions = getFunctions(app, "europe-west1");
 
 export const googleProvider = new GoogleAuthProvider();
 
 export async function initFirebase() {
-  console.debug("[Town Hall] Firebase Modular Services Connected.");
+  console.debug("[Town Hall] Firebase Persistent Services Connected.");
   return Promise.resolve();
 }
 

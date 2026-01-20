@@ -1,4 +1,3 @@
-
 /**
  * Town Hall UAE - Firebase Messaging Service Worker (Production)
  */
@@ -23,7 +22,7 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification?.title || "Town Hall UAE";
   const notificationOptions = {
     body: payload.notification?.body || "Update from your UAE Service Marketplace.",
-    icon: "/logo192.png", // Ensure these icons exist in your public folder
+    icon: "/logo192.png", 
     badge: "/badge.png",
     data: {
       actionUrl: payload.data?.actionUrl || '/'
@@ -39,14 +38,12 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // Check if a tab with this URL is already open
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
         if (client.url.includes(actionUrl) && 'focus' in client) {
           return client.focus();
         }
       }
-      // Otherwise open a new tab
       if (clients.openWindow) {
         return clients.openWindow(actionUrl);
       }

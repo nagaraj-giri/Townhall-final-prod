@@ -7,21 +7,18 @@ const rootElement = document.getElementById('root');
 if (rootElement) {
   const root = ReactDOM.createRoot(rootElement);
   
-  // Register Service Worker for Push Notifications
+  // Register Service Worker for Push Notifications (FCM)
   if ('serviceWorker' in navigator) {
     const registerSW = () => {
-      // Use a relative path which is more resilient in sandboxed environments
-      navigator.serviceWorker.register('./firebase-messaging-sw.js')
+      // Standard production registration for Cloud Run
+      // Ensure firebase-messaging-sw.js is in your public/dist folder
+      navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: '/' })
         .then((registration) => {
-          console.debug('[ServiceWorker] Registration successful with scope: ', registration.scope);
+          console.debug('[ServiceWorker] Production registration active:', registration.scope);
         })
         .catch((err) => {
-          // "Invalid state" errors are common in iframes/previews and can be ignored as non-fatal
-          if (err.message && err.message.includes('invalid state')) {
-            console.warn('[ServiceWorker] Registration skipped: Document is in an invalid state (common in preview environments).');
-          } else {
-            console.error('[ServiceWorker] Registration failed: ', err);
-          }
+          // Log errors for debugging production deployment issues
+          console.warn('[ServiceWorker] Push registration failed:', err.message);
         });
     };
 

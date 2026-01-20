@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, RFQ, UserRole } from '../../types';
 import { dataService } from '../services/dataService';
@@ -13,6 +14,8 @@ const Queries: React.FC<QueriesProps> = ({ user }) => {
   const { toggleNotifications, unreadCount, chatUnreadCount } = useApp();
   const [filter, setFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortOption, setSortOption] = useState<'Newest' | 'Oldest' | 'Quotes'>('Newest');
+  const [isSortOpen, setIsSortOpen] = useState(false);
   const [queries, setQueries] = useState<RFQ[]>([]);
   
   useEffect(() => {
@@ -26,20 +29,29 @@ const Queries: React.FC<QueriesProps> = ({ user }) => {
     return () => unsub();
   }, [user.id, user.role]);
 
-  const filteredQueries = queries.filter(q => {
-    const searchLower = (searchQuery || '').toLowerCase();
-    const titleLower = (q.title || '').toLowerCase();
-    const matchesSearch = titleLower.includes(searchLower) || (q.idDisplay || '').toLowerCase().includes(searchLower);
-    
-    // Explicit filter matching for accepted state
-    const matchesFilter = filter === 'All' || 
-                          (filter === 'Open' && q.status === 'OPEN') ||
-                          (filter === 'Active' && q.status === 'ACTIVE') ||
-                          (filter === 'Accepted' && q.status === 'ACCEPTED') ||
-                          (filter === 'Completed' && q.status === 'COMPLETED') ||
-                          (filter === 'Canceled' && q.status === 'CANCELED');
-    return matchesSearch && matchesFilter;
-  });
+  const filteredAndSortedQueries = useMemo(() => {
+    let result = queries.filter(q => {
+      const searchLower = (searchQuery || '').toLowerCase();
+      const titleLower = (q.title || '').toLowerCase();
+      const matchesSearch = titleLower.includes(searchLower) || (q.idDisplay || '').toLowerCase().includes(searchLower);
+      
+      const matchesFilter = filter === 'All' || 
+                            (filter === 'Open' && q.status === 'OPEN') ||
+                            (filter === 'Active' && q.status === 'ACTIVE') ||
+                            (filter === 'Accepted' && q.status === 'ACCEPTED') ||
+                            (filter === 'Completed' && q.status === 'COMPLETED') ||
+                            (filter === 'Canceled' && q.status === 'CANCELED');
+      return matchesSearch && matchesFilter;
+    });
+
+    return [...result].sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      if (sortOption === 'Oldest') return dateA - dateB;
+      if (sortOption === 'Quotes') return b.quotesCount - a.quotesCount;
+      return dateB - dateA;
+    });
+  }, [queries, searchQuery, filter, sortOption]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -75,8 +87,38 @@ const Queries: React.FC<QueriesProps> = ({ user }) => {
             <button key={f} onClick={() => setFilter(f)} className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest shrink-0 transition-all ${filter === f ? 'bg-primary text-white shadow-lg' : 'bg-white text-gray-400 border border-gray-50'}`}>{f}</button>
           ))}
         </div>
+
+        {user.role === UserRole.ADMIN && (
+          <div className="flex justify-end items-center gap-2 mb-1 relative">
+            <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Sort:</span>
+            <button 
+              onClick={() => setIsSortOpen(!isSortOpen)}
+              className="flex items-center gap-1 text-[11px] font-black text-primary uppercase active:scale-95 transition-transform"
+            >
+              {sortOption === 'Quotes' ? 'Most Quotes' : sortOption}
+              <span className="material-symbols-outlined text-sm font-black">expand_more</span>
+            </button>
+            {isSortOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsSortOpen(false)}></div>
+                <div className="absolute top-7 right-0 w-36 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-in fade-in zoom-in-95">
+                  {(['Newest', 'Oldest', 'Quotes'] as const).map(opt => (
+                    <button 
+                      key={opt}
+                      onClick={() => { setSortOption(opt); setIsSortOpen(false); }}
+                      className={`w-full px-4 py-2.5 text-left text-[11px] font-bold ${sortOption === opt ? 'text-primary bg-primary/5' : 'text-text-dark hover:bg-gray-50'}`}
+                    >
+                      {opt === 'Quotes' ? 'Most Quotes' : opt}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         <div className="space-y-4 pt-2">
-          {filteredQueries.length > 0 ? filteredQueries.map((q) => (
+          {filteredAndSortedQueries.length > 0 ? filteredAndSortedQueries.map((q) => (
             <div key={q.id} onClick={() => navigate(`/rfq/${q.id}`)} className={`bg-white rounded-[2rem] p-5 shadow-card border-l-[6px] transition-all active:scale-[0.98] cursor-pointer ${getStatusColor(q.status)}`}>
               <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center gap-4">
@@ -89,7 +131,7 @@ const Queries: React.FC<QueriesProps> = ({ user }) => {
                   q.status === 'ACCEPTED' ? 'bg-primary/5 text-primary' :
                   q.status === 'COMPLETED' ? 'bg-green-50 text-green-600' :
                   'bg-gray-50 text-gray-400'
-                }`}>{q.status}</span>
+                }`}>{q.status === 'OPEN' ? 'OPENED' : q.status}</span>
               </div>
             </div>
           )) : (
