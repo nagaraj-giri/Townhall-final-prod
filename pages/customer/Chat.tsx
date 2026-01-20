@@ -79,7 +79,7 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
   if (id) {
     const currentConv = conversations.find(c => c.id === id) || { name: 'Chat', avatar: '', isOnline: false, category: '' };
     return (
-      <div className="flex flex-col h-screen bg-[#FDF9F6]">
+      <div className="flex flex-col h-screen bg-transparent">
         <header className="bg-white px-4 pt-12 pb-3 flex items-center justify-between shrink-0 shadow-sm border-b border-gray-50 z-10">
           <div className="flex items-center gap-2">
             <button onClick={() => navigate('/messages')} className="p-2 text-text-dark font-normal">
@@ -134,7 +134,7 @@ const Chat: React.FC<ChatProps> = ({ user }) => {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#FDFBF7] pb-24">
+    <div className="flex flex-col min-h-screen bg-transparent pb-24">
       <header className="px-6 pt-10 pb-4 shrink-0"><h1 className="text-2xl font-black text-[#333333] uppercase">Messages</h1></header>
       <main className="px-5 space-y-3 flex-1 overflow-y-auto no-scrollbar pb-6">
         <div className="relative mb-4">

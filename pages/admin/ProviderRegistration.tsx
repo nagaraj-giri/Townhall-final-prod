@@ -112,7 +112,7 @@ const ProviderRegistration: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7] flex flex-col items-center py-10 px-6">
+    <div className="min-h-screen bg-transparent flex flex-col items-center py-10 px-6">
       <div className="max-w-md w-full space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <header className="flex flex-col items-center text-center space-y-3">
           <button onClick={() => navigate('/login')} className="self-start w-10 h-10 bg-white rounded-2xl shadow-soft flex items-center justify-center text-gray-400 mb-2">

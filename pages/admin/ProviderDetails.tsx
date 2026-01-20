@@ -1,20 +1,21 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { dataService } from '../services/dataService';
 import { authService } from '../authService';
-import { User, Quote, ServiceCategory, Review } from '../../types';
+import { User, Quote, Review } from '../../types';
 import { useApp } from '../../App';
-import { PlacesField } from '../../Functions/placesfield';
 
 const ProviderDetails: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { showToast } = useApp();
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  
   const [user, setUser] = useState<User | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isSendingReset, setIsSendingReset] = useState(false);
-  const [availableServices, setAvailableServices] = useState<ServiceCategory[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [providerQuotes, setProviderQuotes] = useState<Quote[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   
@@ -22,53 +23,28 @@ const ProviderDetails: React.FC = () => {
     name: '',
     phone: '',
     locationName: '',
-    lat: 0,
-    lng: 0,
     description: '',
-    primaryService: '',
-    categories: [] as string[]
+    services: [] as string[],
+    categories: [] as string[],
+    gallery: [] as string[]
   });
-  const [newCategory, setNewCategory] = useState('');
-
-  const addCategory = () => {
-    if (newCategory.trim() && !editForm.categories.includes(newCategory.trim())) {
-      setEditForm(prev => ({
-        ...prev,
-        categories: [...prev.categories, newCategory.trim()]
-      }));
-      setNewCategory('');
-    }
-  };
-
-  const removeCategory = (tag: string) => {
-    setEditForm(prev => ({
-      ...prev,
-      categories: prev.categories.filter(c => c !== tag)
-    }));
-  };
 
   useEffect(() => {
     const fetchData = async () => {
       if (!id) return;
-      const [u, cats] = await Promise.all([
-        dataService.getUserById(id),
-        dataService.getCategories()
-      ]);
-      
+      const u = await dataService.getUserById(id);
       if (u) {
         setUser(u as User);
         setEditForm({
           name: u.name || '',
           phone: u.phone || '',
           locationName: u.locationName || '',
-          lat: u.location?.lat || 0,
-          lng: u.location?.lng || 0,
           description: u.description || '',
-          primaryService: u.services?.[0] || '',
-          categories: u.categories || []
+          services: u.services || [],
+          categories: u.categories || [],
+          gallery: u.gallery || []
         });
       }
-      setAvailableServices(cats as ServiceCategory[]);
     };
     fetchData();
   }, [id]);
@@ -85,26 +61,31 @@ const ProviderDetails: React.FC = () => {
 
   const stats = useMemo(() => {
     const totalQuotes = providerQuotes.length;
-    const wins = providerQuotes.filter(q => q.status === 'ACCEPTED').length;
-    const conversion = totalQuotes > 0 ? Math.round((wins / totalQuotes) * 100) : 0;
+    const acceptedQuotes = providerQuotes.filter(q => q.status === 'ACCEPTED');
+    const totalSales = acceptedQuotes.reduce((acc, q) => acc + (parseFloat(q.price) || 0), 0);
+    const avgRating = reviews.length > 0 
+      ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1)
+      : (user?.rating || 0).toFixed(1);
     
+    const formattedSales = totalSales >= 1000 ? `${(totalSales / 1000).toFixed(0)}k` : totalSales;
+
     return {
       quotesSent: totalQuotes,
-      conversion: `${conversion}%`,
-      hours: '---'
+      sales: formattedSales,
+      rating: avgRating
     };
-  }, [providerQuotes]);
+  }, [providerQuotes, reviews, user]);
 
   const activityLog = useMemo(() => {
     const logs = [];
     if (user?.createdAt) {
-      logs.push({ title: 'Account Created', desc: 'Provider profile initialized in registry', time: new Date(user.createdAt), icon: 'person_add', color: 'bg-gray-200' });
+      logs.push({ title: 'Account Created', desc: 'Initial registration and email verification', time: new Date(user.createdAt), date: new Date(user.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }), color: 'bg-gray-200' });
     }
     if (user?.lastLoginAt) {
-      logs.push({ title: 'User Login', desc: `Successful login from ${user.locationName || 'Dubai Hub'}`, time: new Date(user.lastLoginAt), icon: 'login', color: 'bg-primary' });
+      logs.push({ title: 'Provider Login', desc: 'System access authenticated', time: new Date(user.lastLoginAt), date: 'Last Session', timeStr: new Date(user.lastLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), color: 'border-primary' });
     }
-    providerQuotes.slice(0, 4).forEach(q => {
-      logs.push({ title: 'Submitted Quote', desc: `Quote sent for RFQ #${q.rfqId.substring(0, 5)}`, time: new Date(q.createdAt), icon: 'send', color: 'bg-indigo-600' });
+    providerQuotes.slice(0, 3).forEach(q => {
+      logs.push({ title: 'Quote Submitted', desc: `Proposal sent for RFQ #${q.rfqId.substring(0, 5).toUpperCase()}`, time: new Date(q.createdAt), date: new Date(q.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }), timeStr: new Date(q.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), color: 'bg-primary' });
     });
     return logs.sort((a, b) => b.time.getTime() - a.time.getTime());
   }, [user, providerQuotes]);
@@ -128,9 +109,9 @@ const ProviderDetails: React.FC = () => {
       name: editForm.name,
       phone: editForm.phone,
       locationName: editForm.locationName,
-      location: { lat: editForm.lat || 25.185, lng: editForm.lng || 55.275 },
       description: editForm.description,
-      services: editForm.primaryService ? [editForm.primaryService] : (user.services || []),
+      gallery: editForm.gallery,
+      services: editForm.services,
       categories: editForm.categories
     };
     try {
@@ -140,6 +121,39 @@ const ProviderDetails: React.FC = () => {
       showToast("Profile Updated", "success");
     } catch (err) {
       showToast("Save failed", "error");
+    }
+  };
+
+  const handleAddPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setIsUploading(true);
+    try {
+      const url = await dataService.uploadImage(file, `gallery/${user.id}/${Date.now()}`);
+      const updatedGallery = [...(user.gallery || []), url];
+      const updatedUser = { ...user, gallery: updatedGallery };
+      await dataService.saveUser(updatedUser);
+      setUser(updatedUser);
+      setEditForm(prev => ({ ...prev, gallery: updatedGallery }));
+      showToast("Photo added to gallery", "success");
+    } catch (err) {
+      showToast("Upload failed", "error");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const removePhoto = async (url: string) => {
+    if (!user) return;
+    const updatedGallery = (user.gallery || []).filter(g => g !== url);
+    const updatedUser = { ...user, gallery: updatedGallery };
+    try {
+      await dataService.saveUser(updatedUser);
+      setUser(updatedUser);
+      setEditForm(prev => ({ ...prev, gallery: updatedGallery }));
+      showToast("Photo removed", "info");
+    } catch (err) {
+      showToast("Action failed", "error");
     }
   };
 
@@ -156,26 +170,21 @@ const ProviderDetails: React.FC = () => {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    showToast("Copied to clipboard", "success");
-  };
-
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen bg-transparent">
       <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
     </div>
   );
 
-  if (!user) return <div className="p-10 text-center font-bold text-gray-300 uppercase tracking-widest text-xs">Record not found</div>;
+  if (!user) return <div className="p-10 text-center font-bold text-gray-300 uppercase tracking-widest text-xs bg-transparent min-h-screen">Record not found</div>;
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#FDF9F3] pb-10">
-      <header className="px-4 pt-10 pb-4 flex items-center justify-between sticky top-0 bg-[#FDF9F3]/80 backdrop-blur-md z-50">
+    <div className="flex flex-col min-h-screen bg-transparent pb-10">
+      <header className="px-4 pt-10 pb-4 flex items-center justify-between sticky top-0 bg-white/20 backdrop-blur-md z-50">
         <button onClick={() => navigate(-1)} className="text-text-dark w-10 h-10 flex items-center justify-start active:scale-90 transition-transform">
           <span className="material-symbols-outlined font-black">arrow_back</span>
         </button>
-        <h1 className="text-[17px] font-bold text-text-dark text-center flex-1">User Details</h1>
+        <h1 className="text-[17px] font-bold text-text-dark text-center flex-1">Provider Details</h1>
         <button className="text-text-dark w-10 h-10 flex items-center justify-end">
           <span className="material-symbols-outlined font-black">more_vert</span>
         </button>
@@ -184,7 +193,7 @@ const ProviderDetails: React.FC = () => {
       <main className="px-6 space-y-8 overflow-y-auto no-scrollbar pt-2 pb-20">
         <div className="flex flex-col items-center text-center space-y-4">
           <div className="relative">
-            <div className="w-28 h-28 rounded-full border-[6px] border-white shadow-lg overflow-hidden bg-white ring-1 ring-black/5">
+            <div className="w-28 h-28 rounded-full border-[6px] border-white shadow-lg overflow-hidden bg-gray-100 flex items-center justify-center ring-1 ring-black/5">
               <img src={user.avatar} className="w-full h-full object-cover" alt="" />
             </div>
             {!user.isBlocked && (
@@ -193,29 +202,32 @@ const ProviderDetails: React.FC = () => {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2 justify-center">
-            {isEditing ? (
-              <input 
-                className="text-[22px] font-black text-text-dark bg-white border-none rounded-xl px-4 py-1 text-center outline-none focus:ring-1 focus:ring-primary shadow-inner max-w-[200px]" 
-                value={editForm.name} 
-                onChange={e => setEditForm({...editForm, name: e.target.value})}
-              />
-            ) : (
-              <h2 className="text-[22px] font-black text-text-dark tracking-tight leading-none">{user.name}</h2>
-            )}
-            <span className="bg-[#EDE7F6] text-primary text-[9px] font-black px-2 py-1 rounded uppercase tracking-tighter">PRO</span>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 justify-center">
+              {isEditing ? (
+                <input 
+                  className="text-[22px] font-black text-text-dark bg-white border-none rounded-xl px-4 py-1 text-center outline-none focus:ring-1 focus:ring-primary shadow-inner max-w-[200px]" 
+                  value={editForm.name} 
+                  onChange={e => setEditForm({...editForm, name: e.target.value})}
+                />
+              ) : (
+                <h2 className="text-[22px] font-black text-text-dark tracking-tight leading-none uppercase">{user.name || 'UNNAMED PROVIDER'}</h2>
+              )}
+              <span className="bg-[#EBE7F5] text-[#5B3D9D] text-[10px] font-black px-2.5 py-1 rounded-md uppercase tracking-tight">AGENCY</span>
+            </div>
+            <p className="text-[12px] font-bold text-gray-400">{user.services?.[0] || 'Uncategorized Provider'}</p>
           </div>
         </div>
 
         <div className="grid grid-cols-4 gap-4 px-2">
           {[
-            { label: isEditing ? 'Cancel' : 'Edit', icon: isEditing ? 'close' : 'edit', onClick: () => setIsEditing(!isEditing), active: isEditing },
+            { label: 'Edit', icon: isEditing ? 'check' : 'edit_square', onClick: isEditing ? handleSave : () => setIsEditing(true), active: isEditing },
             { label: user.isBlocked ? 'Restore' : 'Suspend', icon: 'block', onClick: handleToggleSuspend, active: user.isBlocked },
-            { label: 'Message', icon: 'chat_bubble', onClick: () => navigate(`/messages/${user.id}`) },
-            { label: isEditing ? 'Confirm' : 'Reset', icon: isEditing ? 'check_circle' : 'history', onClick: isEditing ? handleSave : handleSendReset, primary: isEditing, loading: isSendingReset },
+            { label: 'Store', icon: 'storefront', onClick: () => navigate(`/storefront/${user.id}`) },
+            { label: 'Reset', icon: isEditing ? 'close' : 'history', onClick: isEditing ? () => setIsEditing(false) : handleSendReset, loading: isSendingReset },
           ].map((btn) => (
             <button key={btn.label} onClick={btn.onClick} disabled={btn.loading} className="flex flex-col items-center gap-2.5">
-              <div className={`w-14 h-14 rounded-2xl shadow-sm flex items-center justify-center border border-white transition-all active:scale-90 ${btn.active ? 'bg-primary/5 border-primary text-primary' : btn.primary ? 'bg-primary border-primary text-white shadow-xl' : 'bg-white text-text-dark'}`}>
+              <div className={`w-14 h-14 rounded-2xl shadow-sm flex items-center justify-center border border-white transition-all active:scale-90 ${btn.active ? 'bg-primary text-white' : 'bg-white text-text-dark'}`}>
                 {btn.loading ? <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div> : <span className="material-symbols-outlined text-[24px]">{btn.icon}</span>}
               </div>
               <span className="text-[11px] font-bold text-gray-400">{btn.label}</span>
@@ -225,47 +237,55 @@ const ProviderDetails: React.FC = () => {
 
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-white flex flex-col items-start min-h-[110px]">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-4">TOTAL <br/> QUOTES SENT</p>
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-4">QUOTES <br/> SENT</p>
             <p className="text-[26px] font-black text-text-dark tracking-tighter">{stats.quotesSent}</p>
           </div>
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-white flex flex-col items-start min-h-[110px]">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-4">% OF <br/> ACCEPTED</p>
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-4">TOTAL <br/> SALES</p>
             <div className="flex items-baseline gap-1">
-               <p className="text-[26px] font-black text-text-dark tracking-tighter">{stats.conversion.replace('%', '')}</p>
-               <p className="text-xs font-bold text-gray-400">%</p>
+               <p className="text-[26px] font-black text-text-dark tracking-tighter">{stats.sales}</p>
+               <p className="text-[10px] font-bold text-gray-400">AED</p>
             </div>
           </div>
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-white flex flex-col items-start min-h-[110px]">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-4">TOTAL HRS <br/> SPEND</p>
-            <div className="flex items-baseline gap-1">
-               <p className="text-[26px] font-black text-text-dark tracking-tighter">{stats.hours}</p>
-               <p className="text-[9px] font-bold text-gray-400">HRS</p>
+            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-4">RATING</p>
+            <div className="flex items-center gap-1">
+               <p className="text-[26px] font-black text-text-dark tracking-tighter">{stats.rating}</p>
+               <span className="material-symbols-outlined text-secondary fill-1 text-[22px]">star</span>
             </div>
           </div>
         </div>
 
         <section className="space-y-4">
            <div className="flex items-center gap-2 px-1">
-              <span className="material-symbols-outlined text-primary text-[20px]">person</span>
-              <h3 className="text-[15px] font-bold text-text-dark">Personal Details</h3>
+              <span className="material-symbols-outlined text-[#5B3D9D] text-[20px] font-bold">corporate_fare</span>
+              <h3 className="text-[15px] font-bold text-text-dark">Business Details</h3>
            </div>
            <div className="bg-white rounded-[2.2rem] shadow-sm border border-white divide-y divide-gray-50 overflow-hidden">
               <div className="p-5 flex items-center justify-between group">
-                <div className="space-y-1">
+                <div className="space-y-1 min-w-0 flex-1">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Email Address</p>
-                  <p className="text-[14px] font-bold text-text-dark">{user.email}</p>
+                  <p className="text-[14px] font-bold text-text-dark truncate">{user.email || 'N/A'}</p>
                 </div>
-                <button onClick={() => copyToClipboard(user.email)} className="w-10 h-10 flex items-center justify-center text-gray-300 hover:text-primary transition-colors">
+                <button onClick={() => { if(user.email) { navigator.clipboard.writeText(user.email); showToast("Copied!", "success"); } }} className="w-10 h-10 flex items-center justify-center text-gray-300 hover:text-primary transition-colors">
                   <span className="material-symbols-outlined text-[20px]">content_copy</span>
                 </button>
               </div>
 
               <div className="p-5 flex items-center justify-between group">
                 <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Phone Number</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Business Phone</p>
                   <div className="flex items-center gap-2">
                     <img src="https://flagcdn.com/w20/ae.png" className="w-4 h-3 object-cover rounded-[1px] shadow-xs" alt="" />
-                    <p className="text-[14px] font-bold text-text-dark">{user.phone || '---'}</p>
+                    {isEditing ? (
+                      <input 
+                        className="text-[14px] font-bold text-text-dark bg-gray-50 rounded-lg px-2 py-1 outline-none w-full"
+                        value={editForm.phone}
+                        onChange={e => setEditForm({...editForm, phone: e.target.value})}
+                      />
+                    ) : (
+                      <p className="text-[14px] font-bold text-text-dark">{user.phone || 'NO PHONE LINKED'}</p>
+                    )}
                   </div>
                 </div>
                 <button className="w-10 h-10 flex items-center justify-center text-gray-300">
@@ -273,46 +293,118 @@ const ProviderDetails: React.FC = () => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-2">
-                <div className="p-5 border-r border-gray-50 space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Nationality</p>
-                  <p className="text-[14px] font-bold text-text-dark uppercase">{user.nationality || '---'}</p>
+              <div className="p-5 flex items-start gap-4">
+                <span className="material-symbols-outlined text-red-500 mt-1">location_on</span>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Location</p>
+                  {isEditing ? (
+                    <input 
+                      className="text-[14px] font-bold text-text-dark bg-gray-50 rounded-lg px-2 py-1 outline-none w-full"
+                      value={editForm.locationName}
+                      onChange={e => setEditForm({...editForm, locationName: e.target.value})}
+                    />
+                  ) : (
+                    <p className="text-[14px] font-bold text-text-dark leading-snug">{user.locationName || 'LOCATION NOT SET'}</p>
+                  )}
                 </div>
-                <div className="p-5 space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Language</p>
-                  <p className="text-[14px] font-bold text-text-dark">---</p>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Services</p>
+                  <p className="text-[14px] font-bold text-text-dark">{editForm.services.length > 0 ? editForm.services.join(', ') : 'No services listed'}</p>
                 </div>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Expertise Tags</p>
+                  <div className="flex flex-wrap gap-2">
+                    {editForm.categories.length > 0 ? editForm.categories.map(cat => (
+                      <span key={cat} className="bg-gray-50 border border-gray-100 text-[10px] font-bold text-text-dark px-3 py-1.5 rounded-lg">{cat}</span>
+                    )) : <p className="text-[11px] text-gray-300 font-bold uppercase">No tags defined</p>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-2">
+                <div className="flex justify-between items-center">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">About Us</p>
+                  {!isEditing && (
+                    <button onClick={() => setIsEditing(true)} className="text-primary text-[10px] font-black uppercase tracking-widest hover:underline">Edit</button>
+                  )}
+                </div>
+                {isEditing ? (
+                  <textarea 
+                    className="w-full bg-gray-50 border-none rounded-xl text-[13px] font-medium text-text-dark p-4 focus:ring-1 focus:ring-primary shadow-inner min-h-[120px] resize-none"
+                    placeholder="Describe this business..."
+                    value={editForm.description}
+                    onChange={e => setEditForm({...editForm, description: e.target.value})}
+                  />
+                ) : (
+                  <p className="text-[13px] text-gray-500 font-medium leading-relaxed">
+                    {user.description || "No professional description provided by this entity."}
+                  </p>
+                )}
+              </div>
+           </div>
+        </section>
+
+        <section className="space-y-4">
+           <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[#5B3D9D] text-[20px] font-bold">collections</span>
+                <h3 className="text-[15px] font-bold text-text-dark">Gallery ({editForm.gallery.length})</h3>
+              </div>
+              <button onClick={() => galleryInputRef.current?.click()} disabled={isUploading} className="text-[11px] font-black text-[#5B3D9D] uppercase tracking-widest">
+                {isUploading ? "Uploading..." : "ADD PHOTO"}
+              </button>
+              <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" onChange={handleAddPhoto} />
+           </div>
+           <div className="bg-white rounded-[2.2rem] shadow-sm border border-white p-6">
+              <div className="grid grid-cols-3 gap-3">
+                 {editForm.gallery.map((img, idx) => (
+                   <div key={idx} className="relative aspect-square rounded-xl overflow-hidden shadow-sm border border-gray-50 bg-gray-50 group">
+                      <img src={img} className="w-full h-full object-cover" alt="" />
+                      <div className="absolute inset-0 bg-black/20 flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => removePhoto(img)} className="w-7 h-7 bg-white rounded-full flex items-center justify-center text-red-500 shadow-sm">
+                           <span className="material-symbols-outlined text-[14px]">delete</span>
+                        </button>
+                      </div>
+                   </div>
+                 ))}
+                 {editForm.gallery.length === 0 && (
+                   <div className="col-span-3 py-10 text-center opacity-30">
+                      <span className="material-symbols-outlined text-4xl mb-2">collections</span>
+                      <p className="text-[10px] font-black uppercase">Empty Portfolio</p>
+                   </div>
+                 )}
               </div>
            </div>
         </section>
 
         <section className="space-y-4">
            <div className="flex items-center gap-2 px-1">
-              <span className="material-symbols-outlined text-primary text-[20px]">balance</span>
-              <h3 className="text-[15px] font-bold text-text-dark">Account Data</h3>
+              <span className="material-symbols-outlined text-[#5B3D9D] text-[20px] font-bold">badge</span>
+              <h3 className="text-[15px] font-bold text-text-dark">Account Status</h3>
            </div>
            <div className="bg-white rounded-[2.2rem] shadow-sm border border-white p-6 space-y-8">
               <div className="grid grid-cols-2 gap-y-8">
                  <div className="space-y-1">
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">User ID</p>
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Provider ID</p>
                    <div className="flex items-center gap-1">
-                      <p className="text-[14px] font-bold text-text-dark">#{user.id.substring(0, 6).toUpperCase()}</p>
-                      <button onClick={() => copyToClipboard(user.id)} className="material-symbols-outlined text-[14px] text-gray-300">content_copy</button>
+                      <p className="text-[14px] font-bold text-text-dark">#PR-{user.id.substring(0, 6).toUpperCase()}</p>
+                      <button onClick={() => { navigator.clipboard.writeText(user.id); showToast("Copied ID!", "success"); }} className="material-symbols-outlined text-[14px] text-gray-300">content_copy</button>
                    </div>
                  </div>
                  <div className="space-y-1">
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Account Type</p>
-                   <p className="text-[14px] font-bold text-text-dark">Provider</p>
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Status</p>
+                   <p className={`text-[14px] font-bold ${user.isBlocked ? 'text-red-500' : 'text-[#8BC34A]'}`}>{user.isBlocked ? 'Suspended' : 'Verified Active'}</p>
                  </div>
                  <div className="space-y-1">
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Registration Date</p>
-                   <p className="text-[14px] font-bold text-text-dark">{user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '---'}</p>
-                   <p className="text-[10px] font-medium text-gray-300">{user.createdAt ? new Date(user.createdAt).toLocaleTimeString('en-US', { hour12: false }) : ''} GST</p>
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Member Since</p>
+                   <p className="text-[14px] font-bold text-text-dark">{user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}</p>
                  </div>
                  <div className="space-y-1">
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Last Login</p>
-                   <p className="text-[14px] font-bold text-text-dark">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '---'}</p>
-                   <p className="text-[10px] font-medium text-gray-300">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleTimeString('en-US', { hour12: false }) : ''} GST</p>
+                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Last Sync</p>
+                   <p className="text-[14px] font-bold text-text-dark">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'NEVER'} GST</p>
                  </div>
               </div>
            </div>
@@ -321,39 +413,37 @@ const ProviderDetails: React.FC = () => {
         <section className="space-y-4">
            <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary text-[20px]">history</span>
-                <h3 className="text-[15px] font-bold text-text-dark">Activity Log</h3>
+                <span className="material-symbols-outlined text-[#5B3D9D] text-[20px] font-bold">history</span>
+                <h3 className="text-[15px] font-bold text-text-dark">Recent Logs</h3>
               </div>
-              <button className="text-[11px] font-bold text-primary uppercase tracking-wider">View All</button>
+              <button className="text-[11px] font-bold text-primary uppercase tracking-wider">Export</button>
            </div>
            
-           <div className="bg-white rounded-[2.2rem] shadow-sm border border-white p-6 space-y-6">
+           <div className="bg-white rounded-[2.2rem] shadow-sm border border-white p-6 space-y-0">
               {activityLog.length > 0 ? activityLog.map((log, idx) => (
-                <div key={idx} className="flex gap-4 relative">
-                   {idx !== activityLog.length - 1 && <div className="absolute left-[11px] top-6 bottom-[-10px] w-[2px] bg-gray-50"></div>}
-                   <div className={`w-6 h-6 rounded-full ${log.color} flex items-center justify-center shrink-0 z-10 border-2 border-white shadow-xs`}>
-                      <div className="w-2.5 h-2.5 rounded-full border-2 border-white"></div>
+                <div key={idx} className="flex gap-4 relative pb-8 group last:pb-2">
+                   {idx !== activityLog.length - 1 && <div className="absolute left-[7px] top-6 bottom-[-8px] w-[2px] bg-gray-50 group-last:hidden"></div>}
+                   <div className={`w-4 h-4 rounded-full ${log.color} shrink-0 z-10 border-[3px] border-white shadow-sm mt-1 flex items-center justify-center`}>
+                      {log.title === 'Provider Login' && <div className="w-full h-full rounded-full border border-primary"></div>}
                    </div>
                    <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start mb-0.5">
                         <h4 className="text-[14px] font-bold text-text-dark">{log.title}</h4>
-                        <span className="text-[10px] font-bold text-gray-300 uppercase">{log.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="text-[10px] font-bold text-gray-300 uppercase">{log.timeStr || log.date}</span>
                       </div>
                       <p className="text-[12px] text-gray-400 font-medium leading-relaxed">{log.desc}</p>
                    </div>
                 </div>
-              )) : (
-                <p className="text-center text-[11px] text-gray-300 font-bold uppercase py-4">No recent activity detected</p>
-              )}
+              )) : <div className="py-6 text-center text-gray-300 text-[10px] font-bold uppercase tracking-widest">No activity found</div>}
            </div>
         </section>
 
         <button 
           onClick={() => { if(window.confirm("PERMANENTLY PURGE THIS ACCOUNT?")) dataService.deleteUser(user.id).then(() => navigate('/admin/users')); }}
-          className="w-full py-4.5 bg-white border border-gray-100 text-red-500 rounded-2xl font-bold text-[13px] flex items-center justify-center gap-3 active:scale-[0.98] transition-all shadow-xs"
+          className="w-full py-5 bg-white border border-gray-100 text-red-500 rounded-2xl font-bold text-[13px] flex items-center justify-center gap-3 active:scale-[0.98] transition-all shadow-xs"
         >
           <span className="material-symbols-outlined text-[18px] font-black text-red-500">delete</span>
-          Delete User Account
+          Purge Provider Record
         </button>
       </main>
     </div>

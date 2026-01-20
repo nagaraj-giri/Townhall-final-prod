@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { User, ChatMessage, UserRole } from '../../types';
@@ -89,7 +88,7 @@ const AdminChat: React.FC<ChatProps> = ({ user }) => {
   if (id) {
     const currentPartner = conversations.find(c => c.id === id) || { name: 'Support Chat', avatar: '', isOnline: false, role: '' };
     return (
-      <div className="flex flex-col h-screen bg-[#F9F6F8]">
+      <div className="flex flex-col h-screen bg-transparent">
         <header className="bg-white px-4 pt-12 pb-3 flex items-center justify-between shrink-0 shadow-sm border-b border-gray-100 z-10">
           <div className="flex items-center gap-2">
             <button onClick={() => navigate('/messages')} className="p-2 text-text-dark">
@@ -144,7 +143,7 @@ const AdminChat: React.FC<ChatProps> = ({ user }) => {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F9F6F8] pb-24">
+    <div className="flex flex-col min-h-screen bg-transparent pb-24">
       <header className="px-6 pt-12 pb-4 shrink-0">
         <h1 className="text-2xl font-bold text-[#333333] tracking-tight">Moderation Inbox</h1>
         <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Platform-Wide Communications</p>

@@ -1,6 +1,7 @@
 
 
 
+
 import React from 'react';
 
 export enum UserRole {
@@ -138,14 +139,13 @@ declare global {
     openSelectKey: () => Promise<void>;
   }
 
-  // Fix: Explicitly declare global 'aistudio' as var to match standard browser global behavior
-  // and prevent modifier conflict errors with the Window interface.
+  // Fix: Explicitly declare global 'aistudio' as var to match standard browser global behavior.
+  // This correctly handles both 'aistudio' and 'window.aistudio' typing in a web context.
   var aistudio: AIStudio;
 
   interface Window {
     google: any;
-    // Environment provides a global aistudio object, which must match the var declaration.
-    aistudio: AIStudio;
+    // Removed redundant aistudio declaration to resolve modifier conflict errors with the global var above.
   }
   
   namespace JSX {
