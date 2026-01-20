@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -11,7 +10,8 @@ import {
   where, 
   onSnapshot, 
   orderBy,
-  writeBatch
+  writeBatch,
+  increment
 } from "firebase/firestore";
 import type { Unsubscribe } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -52,10 +52,7 @@ export const dataService = {
       const docSnap = await getDoc(doc(db, COLLECTIONS.USERS, id));
       if (docSnap.exists()) {
         const data = docSnap.data() as User;
-        return {
-          ...data,
-          id: docSnap.id
-        };
+        return { ...data, id: docSnap.id };
       }
       return null;
     } catch (err) { return null; }
@@ -152,18 +149,39 @@ export const dataService = {
 
   saveQuote: async (quote: Quote) => {
     try {
-      await setDoc(doc(db, COLLECTIONS.QUOTES, quote.id), quote, { merge: true });
+      const batch = writeBatch(db);
+      const quoteRef = doc(db, COLLECTIONS.QUOTES, quote.id);
       const rfqRef = doc(db, COLLECTIONS.RFQS, quote.rfqId);
+      
+      const quoteSnap = await getDoc(quoteRef);
       const rfqSnap = await getDoc(rfqRef);
+      
+      batch.set(quoteRef, quote, { merge: true });
+
       if (rfqSnap.exists()) {
         const rfqData = rfqSnap.data() as RFQ;
-        const qCountQuery = query(collection(db, COLLECTIONS.QUOTES), where('rfqId', '==', quote.rfqId));
-        const quotesSnapshot = await getDocs(qCountQuery);
-        const updates: any = { quotesCount: quotesSnapshot.size };
-        if (rfqData.status === 'OPEN' && quotesSnapshot.size > 0) updates.status = 'ACTIVE';
-        await updateDoc(rfqRef, updates);
+        const updates: any = {};
+        
+        // Only increment if it's a new quote
+        if (!quoteSnap.exists()) {
+          updates.quotesCount = increment(1);
+        }
+        
+        // Flip status to ACTIVE if the first quote arrives
+        if (rfqData.status === 'OPEN') {
+          updates.status = 'ACTIVE';
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          batch.update(rfqRef, updates);
+        }
       }
-    } catch (e) {}
+      
+      await batch.commit();
+    } catch (e) {
+      console.error("[DataService] Failed to save quote:", e);
+      throw e;
+    }
   },
 
   // NOTIFS
@@ -238,19 +256,7 @@ export const dataService = {
     try {
       const q = query(collection(db, COLLECTIONS.BROADCASTS), orderBy('timestamp', 'desc'));
       const querySnapshot = await getDocs(q);
-      const broadcasts = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-      
-      const enriched = await Promise.all(broadcasts.map(async (b) => {
-        try {
-          const nQuery = query(collection(db, COLLECTIONS.NOTIFS), where('broadcastId', '==', b.id), where('isRead', '==', true));
-          const nSnapshot = await getDocs(nQuery);
-          return { ...b, openedCount: nSnapshot.size };
-        } catch (e) {
-          return { ...b, openedCount: 0 };
-        }
-      }));
-      
-      return enriched;
+      return querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
     } catch (err) { return []; }
   },
 
@@ -259,10 +265,8 @@ export const dataService = {
     return onSnapshot(q, async (snapshot) => {
       const baseBroadcasts = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       
-      // Fetch stats independently to avoid blocking the main UI list
       const enriched = await Promise.all(baseBroadcasts.map(async (b) => {
         try {
-          // Optimized query using index: broadcastId + isRead
           const nQuery = query(
             collection(db, COLLECTIONS.NOTIFS), 
             where('broadcastId', '==', b.id), 
@@ -271,14 +275,11 @@ export const dataService = {
           const nSnapshot = await getDocs(nQuery);
           return { ...b, openedCount: nSnapshot.size };
         } catch (e) {
-          console.warn(`[BroadcastMetrics] Error for ${b.id}:`, e);
           return { ...b, openedCount: 0 };
         }
       }));
       
       callback(enriched);
-    }, (error) => {
-      console.error("[BroadcastListener] Critical snapshot error:", error);
     });
   },
 

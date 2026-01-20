@@ -116,7 +116,7 @@ const CustomerDetails: React.FC = () => {
   };
 
   if (loading) return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#FDFBF7] gap-4">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-transparent gap-4">
       <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
     </div>
   );
@@ -124,8 +124,8 @@ const CustomerDetails: React.FC = () => {
   if (!user) return <div className="p-20 text-center text-gray-300 uppercase tracking-widest font-black text-[10px]">User Not Found</div>;
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#FDFBF7] pb-12">
-      <header className="px-6 pt-10 pb-4 flex items-center justify-between sticky top-0 z-50 bg-[#FDFBF7]/80 backdrop-blur-md">
+    <div className="flex flex-col min-h-screen bg-transparent pb-12">
+      <header className="px-6 pt-10 pb-4 flex items-center justify-between sticky top-0 z-50 bg-white/20 backdrop-blur-md">
         <button onClick={() => navigate(-1)} className="text-text-dark w-10 h-10 flex items-center justify-start active:scale-90 transition-transform">
           <span className="material-symbols-outlined font-black text-[24px]">arrow_back</span>
         </button>
@@ -142,7 +142,7 @@ const CustomerDetails: React.FC = () => {
               <img src={user.avatar} className="w-full h-full object-cover" alt={user.name} />
             </div>
             {!user.isBlocked && (
-              <div className="absolute bottom-1 right-1 bg-[#8BC34A] w-7 h-7 rounded-full border-4 border-[#FDFBF7] flex items-center justify-center shadow-md">
+              <div className="absolute bottom-1 right-1 bg-[#8BC34A] w-7 h-7 rounded-full border-4 border-white flex items-center justify-center shadow-md">
                 <span className="material-symbols-outlined text-white text-[14px] font-black">check</span>
               </div>
             )}
@@ -215,7 +215,7 @@ const CustomerDetails: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-gray-300 uppercase tracking-widest ml-1">Nationality</label>
-                <p className="text-[13px] font-bold text-text-dark">{user.nationality || 'Emirati'}</p>
+                <p className="text-[13px] font-bold text-text-dark">{user.nationality || ''}</p>
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-gray-300 uppercase tracking-widest ml-1">Language</label>

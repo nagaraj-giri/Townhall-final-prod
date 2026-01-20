@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { dataService } from '../services/dataService';
@@ -127,15 +126,15 @@ const AdminServiceEditor: React.FC = () => {
   };
 
   if (isLoading) return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#FCF6E7] gap-4">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-transparent gap-4">
       <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
       <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Opening Service...</p>
     </div>
   );
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#FCF6E7] pb-32">
-      <header className="px-6 pt-12 pb-4 flex items-center justify-between sticky top-0 bg-[#FCF6E7]/80 backdrop-blur-md z-50">
+    <div className="flex flex-col min-h-screen bg-transparent pb-32">
+      <header className="px-6 pt-12 pb-4 flex items-center justify-between sticky top-0 bg-white/20 backdrop-blur-md z-50 border-b border-gray-100 shadow-sm">
         <button onClick={() => navigate(-1)} className="text-text-dark w-10 h-10 flex items-center justify-start active:scale-90 transition-transform">
           <span className="material-symbols-outlined text-2xl font-bold">arrow_back</span>
         </button>
@@ -146,7 +145,7 @@ const AdminServiceEditor: React.FC = () => {
       </header>
 
       <main className="px-5 pt-4 space-y-6 flex-1 overflow-y-auto no-scrollbar">
-        <section className="bg-white rounded-[2rem] p-8 shadow-card border border-white space-y-6">
+        <section className="bg-white/80 backdrop-blur-sm rounded-[2rem] p-8 shadow-card border border-white space-y-6">
           <div className="flex items-center gap-3">
              <span className="material-symbols-outlined text-[#5B3D9D] text-[20px] font-bold">edit_note</span>
              <h3 className="text-[15px] font-bold text-text-dark">Service Details</h3>
@@ -154,7 +153,7 @@ const AdminServiceEditor: React.FC = () => {
           <div className="space-y-1.5">
             <label className="text-[11px] font-bold text-text-dark ml-1 uppercase tracking-widest opacity-60">Service Title</label>
             <input 
-              className="w-full px-6 py-4 bg-[#F9FAFB] rounded-2xl text-[14px] border-none focus:ring-1 focus:ring-primary outline-none placeholder-gray-300 font-bold text-text-dark shadow-inner"
+              className="w-full px-6 py-4 bg-[#F9FAFB]/50 rounded-2xl text-[14px] border-none focus:ring-1 focus:ring-primary outline-none placeholder-gray-300 font-bold text-text-dark shadow-inner"
               placeholder="e.g., Visa Processing"
               value={form.name}
               onChange={e => setForm({...form, name: e.target.value})}
@@ -163,7 +162,7 @@ const AdminServiceEditor: React.FC = () => {
           <div className="space-y-1.5">
             <label className="text-[11px] font-bold text-text-dark ml-1 uppercase tracking-widest opacity-60">Description</label>
             <textarea 
-              className="w-full px-6 py-5 bg-[#F9FAFB] rounded-[1.8rem] text-[13px] border-none focus:ring-1 focus:ring-primary outline-none min-h-[140px] placeholder-gray-300 font-medium shadow-inner resize-none text-text-dark leading-relaxed"
+              className="w-full px-6 py-5 bg-[#F9FAFB]/50 rounded-[1.8rem] text-[13px] border-none focus:ring-1 focus:ring-primary outline-none min-h-[140px] placeholder-gray-300 font-medium shadow-inner resize-none text-text-dark leading-relaxed"
               placeholder="Briefly describe what this service covers..."
               value={form.description}
               onChange={e => setForm({...form, description: e.target.value})}
@@ -171,14 +170,14 @@ const AdminServiceEditor: React.FC = () => {
           </div>
         </section>
 
-        <section className="bg-white rounded-[2rem] p-8 shadow-card border border-white space-y-8">
+        <section className="bg-white/80 backdrop-blur-sm rounded-[2rem] p-8 shadow-card border border-white space-y-8">
           <div className="flex items-center gap-3">
              <span className="material-symbols-outlined text-[#5B3D9D] text-[20px] font-bold">palette</span>
              <h3 className="text-[15px] font-bold text-text-dark">Appearance</h3>
           </div>
           <div className="space-y-4">
              <label className="text-[11px] font-bold text-text-dark ml-1 uppercase tracking-widest opacity-60">Service Icon</label>
-             <div className="bg-[#F9FAFB] p-4 rounded-2xl flex items-center justify-between border border-gray-100">
+             <div className="bg-[#F9FAFB]/50 p-4 rounded-2xl flex items-center justify-between border border-gray-100">
                 <div className="flex items-center gap-4">
                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-gray-50 shrink-0">
                       <span className="material-symbols-outlined text-3xl font-bold" style={{ color: form.color }}>{form.icon}</span>
@@ -191,7 +190,7 @@ const AdminServiceEditor: React.FC = () => {
                 <button onClick={() => setIsIconPickerOpen(!isIconPickerOpen)} className="px-5 py-2.5 bg-white border border-gray-100 rounded-xl text-[12px] font-bold text-text-dark shadow-sm active:scale-95 transition-all shrink-0">Change</button>
              </div>
              {isIconPickerOpen && (
-               <div className="grid grid-cols-5 gap-3 p-4 bg-gray-50 rounded-2xl animate-in fade-in zoom-in-95 max-h-60 overflow-y-auto no-scrollbar border border-gray-100">
+               <div className="grid grid-cols-5 gap-3 p-4 bg-white/90 backdrop-blur-md rounded-2xl animate-in fade-in zoom-in-95 max-h-60 overflow-y-auto no-scrollbar border border-gray-100 shadow-xl">
                   {commonIcons.map(item => (
                     <button 
                       key={item.icon} 
@@ -223,8 +222,8 @@ const AdminServiceEditor: React.FC = () => {
         </section>
       </main>
 
-      <footer className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white border-t border-gray-100 p-6 flex gap-4 z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.06)]">
-        <button onClick={() => navigate(-1)} className="flex-1 py-4.5 border border-gray-100 rounded-2xl text-[14px] font-bold text-text-dark active:scale-95 transition-all">Cancel</button>
+      <footer className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white/95 backdrop-blur-md border-t border-gray-100 p-6 flex gap-4 z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.06)]">
+        <button onClick={() => navigate(-1)} className="flex-1 py-4.5 bg-white border border-gray-100 rounded-2xl text-[14px] font-bold text-text-dark active:scale-95 transition-all">Cancel</button>
         <button onClick={handleSave} disabled={isSaving} className="flex-[1.5] py-4.5 bg-[#5B3D9D] text-white rounded-2xl font-bold text-[14px] shadow-btn-glow flex items-center justify-center gap-2.5 active:scale-95 transition-all disabled:opacity-50">
           {isSaving ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <><span className="material-symbols-outlined text-[20px]">save</span>Save Service</>}
         </button>

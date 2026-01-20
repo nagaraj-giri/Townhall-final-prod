@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, UserRole, ServiceCategory } from '../../types';
@@ -103,7 +102,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#FCF6E7] pb-32">
+    <div className="flex flex-col min-h-screen bg-transparent pb-32">
       <header className="px-8 pt-14 pb-6 flex items-center justify-between">
         <h1 className="text-[14px] font-[900] text-text-dark uppercase tracking-[0.2em]">Command Center</h1>
         <div className="flex items-center gap-3">
@@ -132,7 +131,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                 >
                   <img src={user.avatar} className="w-full h-full object-cover" alt="Admin Avatar" />
                 </div>
-                {/* Fix: Added missing className property and ensured Tailwind classes are correctly stringified */}
                 <div 
                   onClick={() => adminAvatarInputRef.current?.click()}
                   className="absolute bottom-1 right-1 bg-primary w-9 h-9 rounded-2xl border-4 border-white flex items-center justify-center shadow-lg text-white cursor-pointer active:scale-90"
@@ -202,7 +200,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
               
               {isSiteOpen && (
                 <div className="px-6 space-y-4 mb-4">
-                  <div className="bg-white rounded-[2rem] shadow-card border border-white p-6 space-y-6">
+                  <div className="bg-white/80 backdrop-blur-sm rounded-[2rem] shadow-card border border-white p-6 space-y-6">
                     <div className="flex items-center justify-between">
                        <div className="flex items-center gap-4">
                          <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 border border-gray-100 overflow-hidden">
@@ -218,21 +216,21 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                     </div>
                     <div className="space-y-2">
                        <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest ml-1">Platform Identity</p>
-                       <input value={settings.siteName} onChange={(e) => setSettings({ ...settings, siteName: e.target.value })} className="w-full px-6 py-4 bg-gray-50 border-none rounded-2xl text-[14px] font-bold text-text-dark focus:ring-1 focus:ring-primary shadow-inner" placeholder="Site Name" />
+                       <input value={settings.siteName} onChange={(e) => setSettings({ ...settings, siteName: e.target.value })} className="w-full px-6 py-4 bg-gray-50/50 border-none rounded-2xl text-[14px] font-bold text-text-dark focus:ring-1 focus:ring-primary shadow-inner" placeholder="Site Name" />
                     </div>
                   </div>
                 </div>
               )}
             </section>
 
-            {/* SERVICES LIST - UPDATED TO MATCH SCREENSHOT */}
+            {/* SERVICES LIST */}
             <section className="px-6 space-y-4">
               <div className="space-y-3">
                 {categories.map((cat) => (
                   <div 
                     key={cat.id} 
                     onClick={() => navigate(`/admin/service/edit/${cat.id}`)}
-                    className="bg-white rounded-[2.5rem] p-5 shadow-card border border-white flex items-center gap-5 active:scale-[0.98] transition-all cursor-pointer group"
+                    className="bg-white/80 backdrop-blur-sm rounded-[2.5rem] p-5 shadow-card border border-white flex items-center gap-5 active:scale-[0.98] transition-all cursor-pointer group"
                   >
                     <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm" style={{ backgroundColor: `${cat.color}15`, color: cat.color }}>
                       <span className="material-symbols-outlined text-3xl font-normal">{cat.icon}</span>
@@ -246,10 +244,9 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                   </div>
                 ))}
                 
-                {/* ADD NEW SERVICE BUTTON - PILL STYLE FROM SCREENSHOT */}
                 <button 
                   onClick={() => navigate('/admin/service/new')}
-                  className="w-full py-4 bg-white border border-gray-100 text-gray-400 rounded-full text-[11px] font-black uppercase tracking-[0.1em] shadow-sm flex items-center justify-center gap-2 active:scale-95 transition-all mt-6"
+                  className="w-full py-4 bg-white/50 border border-gray-100 text-gray-400 rounded-full text-[11px] font-black uppercase tracking-[0.1em] shadow-sm flex items-center justify-center gap-2 active:scale-95 transition-all mt-6"
                 >
                   <span className="material-symbols-outlined text-sm">add</span>
                   ADD NEW SERVICE
@@ -260,8 +257,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
         )}
       </main>
 
-      {/* BOTTOM NAVIGATION - PRECISELY MATCHING SCREENSHOT */}
-      <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40_rgba(0,0,0,0.06)]">
+      <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white/95 border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40_rgba(0,0,0,0.06)] backdrop-blur-md">
         <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-40">
           <span className="material-symbols-outlined text-[28px] font-light">grid_view</span>
           <span className="text-[9px] font-black uppercase tracking-widest">HOME</span>

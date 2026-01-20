@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User } from '../../types';
@@ -39,8 +38,8 @@ const AdminBroadcastManager: React.FC<Props> = ({ user }) => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#FDFBF7] pb-10">
-      <header className="px-6 pt-12 pb-4 flex items-center justify-between sticky top-0 bg-white/90 backdrop-blur-md z-50 border-b border-gray-100 shadow-sm">
+    <div className="flex flex-col min-h-screen bg-transparent pb-10">
+      <header className="px-6 pt-12 pb-4 flex items-center justify-between sticky top-0 bg-white/10 backdrop-blur-md z-50 border-b border-gray-100 shadow-sm">
         <button 
           onClick={() => navigate('/')} 
           className="text-text-dark w-10 h-10 flex items-center justify-center -ml-2 rounded-full active:bg-gray-100 transition-all active:scale-90"
