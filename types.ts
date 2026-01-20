@@ -1,6 +1,3 @@
-
-
-
 import React from 'react';
 
 export enum UserRole {
@@ -141,8 +138,8 @@ declare global {
   interface Window {
     google: any;
     // The environment provides a global aistudio object.
-    // Fix: Added 'readonly' modifier to match environment definitions and resolve identical modifiers error.
-    readonly aistudio: AIStudio;
+    // Fix: Removed 'readonly' modifier to match ambient environment definitions and resolve 'identical modifiers' error.
+    aistudio: AIStudio;
   }
   
   namespace JSX {
@@ -150,7 +147,7 @@ declare global {
       'gmpx-place-picker': any;
       'gmp-place-autocomplete': any;
       'gmpx-place-picker-loader': any;
-      'gmpx-api-loader': any;
+      'gmp-api-loader': any;
       [elemName: string]: any;
     }
   }

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, ServiceCategory, RFQ } from '../../types';
@@ -51,6 +52,27 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     if (diffHrs < 1) return 'Just now';
     if (diffHrs < 24) return `${diffHrs} hrs ago`;
     return `${Math.floor(diffHrs / 24)} days ago`;
+  };
+
+  const getStatusBorderColor = (status: string) => {
+    switch (status) {
+      case 'OPEN': return 'border-orange-400';
+      case 'ACTIVE': return 'border-blue-400';
+      case 'ACCEPTED': return 'border-primary';
+      case 'COMPLETED': return 'border-accent-green';
+      case 'CANCELED': return 'border-red-400';
+      default: return 'border-gray-300';
+    }
+  };
+
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case 'OPEN': return 'bg-orange-50 text-orange-500';
+      case 'ACTIVE': return 'bg-blue-50 text-blue-500';
+      case 'ACCEPTED': return 'bg-primary/5 text-primary';
+      case 'COMPLETED': return 'bg-green-50 text-green-600';
+      default: return 'bg-gray-50 text-gray-400';
+    }
   };
 
   if (isLoading) return (
@@ -128,12 +150,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
               <div 
                 key={rfq.id} 
                 onClick={() => navigate(`/rfq/${rfq.id}`)}
-                className="bg-white rounded-[2.5rem] p-6 shadow-card border border-white relative overflow-hidden active:scale-[0.98] transition-all cursor-pointer group"
+                className={`bg-white rounded-[2.5rem] p-6 shadow-card border-white relative overflow-hidden active:scale-[0.98] transition-all cursor-pointer group border-l-[6px] ${getStatusBorderColor(rfq.status)}`}
               >
-                <div className="absolute top-4 left-0 w-1.5 h-20 bg-primary rounded-r-full"></div>
                 <div className="flex justify-between items-start mb-3">
-                   <div className="inline-flex px-3 py-1 bg-primary/5 text-primary rounded-xl text-[10px] font-normal uppercase tracking-tight">
-                     {rfq.category}
+                   <div className="flex items-center gap-2">
+                     <div className="inline-flex px-3 py-1 bg-primary/5 text-primary rounded-xl text-[10px] font-normal uppercase tracking-tight">
+                       {rfq.category}
+                     </div>
+                     <div className={`px-2 py-1 text-[8px] font-black uppercase rounded ${getStatusBadgeClass(rfq.status)}`}>
+                       {rfq.status === 'OPEN' ? 'OPENED' : rfq.status}
+                     </div>
                    </div>
                    <div className="px-3 py-1 bg-[#FFF9E6] text-[#A18100] rounded-xl text-[10px] font-normal uppercase tracking-tight">
                      Quotes: {rfq.quotesCount}

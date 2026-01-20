@@ -1,3 +1,4 @@
+
 {
   "indexes": [
     {
@@ -8,6 +9,30 @@
           "fieldPath": "userId",
           "order": "ASCENDING"
         },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionId": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "broadcastId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isRead",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionId": "broadcasts",
+      "queryScope": "COLLECTION",
+      "fields": [
         {
           "fieldPath": "timestamp",
           "order": "DESCENDING"

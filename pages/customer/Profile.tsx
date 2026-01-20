@@ -38,11 +38,11 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
   const [profileData, setProfileData] = useState({
     name: user.name,
     email: user.email,
-    phone: user.phone || '',
-    nationality: user.nationality || 'United Arab Emirates',
+    phone: user.phone?.split(' ').slice(1).join(' ') || '',
+    nationality: user.nationality || '',
     avatar: user.avatar,
-    phoneDial: '+971',
-    phoneFlag: 'https://flagcdn.com/w40/ae.png'
+    phoneDial: user.phone?.split(' ')[0] || '+971',
+    phoneFlag: COUNTRIES.find(c => user.phone?.startsWith(c.dialCode))?.flag || 'https://flagcdn.com/w40/ae.png'
   });
 
   useEffect(() => {
@@ -82,11 +82,11 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
 
   const handleSaveDetails = async () => {
     try {
+      const fullPhone = profileData.phone.trim() ? `${profileData.phoneDial} ${profileData.phone.trim()}` : '';
       const updatedUser: User = {
         ...user,
         name: profileData.name,
-        email: profileData.email,
-        phone: `${profileData.phoneDial} ${profileData.phone}`,
+        phone: fullPhone,
         nationality: profileData.nationality
       };
       await dataService.saveUser(updatedUser);
@@ -99,9 +99,9 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
   };
 
   const personalDetails = [
-    { key: 'email', label: 'EMAIL ADDRESS', value: profileData.email, icon: 'mail', color: 'bg-indigo-50 text-indigo-500' },
-    { key: 'phone', label: 'MOBILE NUMBER', value: profileData.phone || 'Not linked', icon: 'call', color: 'bg-green-50 text-green-500' },
-    { key: 'nationality', label: 'NATIONALITY', value: profileData.nationality || 'Emirates', icon: 'flag', color: 'bg-yellow-50 text-yellow-500' },
+    { key: 'email', label: 'EMAIL ADDRESS', value: profileData.email, icon: 'mail', color: 'bg-indigo-50 text-indigo-500', readOnly: true },
+    { key: 'phone', label: 'MOBILE NUMBER', value: profileData.phone.trim() ? `${profileData.phoneDial} ${profileData.phone}` : 'Not linked', icon: 'call', color: 'bg-green-50 text-green-500' },
+    { key: 'nationality', label: 'NATIONALITY', value: profileData.nationality || 'Not specified', icon: 'flag', color: 'bg-yellow-50 text-yellow-500' },
   ];
 
   const currentNationalityFlag = COUNTRIES.find(c => c.name === profileData.nationality)?.flag || 'https://flagcdn.com/w40/ae.png';
@@ -176,7 +176,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
               <div key={detail.label} className="bg-white rounded-[2rem] p-5 flex flex-col shadow-card border border-white relative">
                 <p className="text-[9px] font-normal text-gray-300 uppercase tracking-widest mb-1.5 ml-1">{detail.label}</p>
                 
-                {isEditing ? (
+                {isEditing && !detail.readOnly ? (
                   detail.key === 'phone' ? (
                     <div className="flex gap-2 w-full relative">
                       {/* Flag Select Trigger */}
@@ -231,7 +231,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                         className="w-full flex items-center gap-4 bg-gray-50 rounded-2xl px-5 py-3.5 shadow-inner border border-gray-100/50"
                       >
                         <img src={currentNationalityFlag} className="w-6 h-4 object-cover rounded-[1px] shadow-sm" alt="" />
-                        <span className="text-[13px] font-bold text-text-dark flex-1 text-left">{profileData.nationality}</span>
+                        <span className="text-[13px] font-bold text-text-dark flex-1 text-left">{profileData.nationality || 'Select Nationality'}</span>
                         <span className="material-symbols-outlined text-gray-400">expand_more</span>
                       </button>
 
@@ -266,7 +266,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                 ) : (
                   <div className="flex items-center gap-4">
                     <div className={`w-10 h-10 ${detail.color} rounded-full flex items-center justify-center shadow-sm shrink-0`}>
-                      {detail.key === 'nationality' ? (
+                      {detail.key === 'nationality' && profileData.nationality ? (
                         <img src={currentNationalityFlag} className="w-5 h-4 object-cover rounded-[1px] shadow-sm" alt="" />
                       ) : (
                         <span className="material-symbols-outlined text-lg font-normal">{detail.icon}</span>

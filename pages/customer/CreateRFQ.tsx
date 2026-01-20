@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { User, RFQ } from '../../types';
@@ -40,6 +39,13 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
   }, [location.state]);
 
   const handleCreate = async () => {
+    // Validation for phone and nationality
+    if (!user.phone || !user.nationality) {
+      showToast("Please update your mobile and nationality in Profile to post query", 'error');
+      setTimeout(() => navigate('/profile'), 2000);
+      return;
+    }
+
     if (!title.trim() || !description.trim()) {
       showToast("Please provide all details", 'error');
       return;
@@ -138,7 +144,7 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
                 placeholder="Tell providers exactly what you need..." 
                 value={description} 
                 onChange={e => setDescription(e.target.value)} 
-                className="w-full px-6 py-5 bg-gray-50 border-none rounded-[2rem] text-[13px] font-medium text-text-dark focus:ring-1 focus:ring-primary shadow-inner min-h-160px resize-none placeholder-gray-300 transition-all" 
+                className="w-full px-6 py-5 bg-gray-50 border-none rounded-[2rem] text-[13px] font-medium text-text-dark focus:ring-1 focus:ring-primary shadow-inner min-h-[160px] resize-none placeholder-gray-300 transition-all" 
               />
             </div>
           </div>

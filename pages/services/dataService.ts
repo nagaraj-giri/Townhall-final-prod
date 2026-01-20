@@ -203,7 +203,6 @@ export const dataService = {
     const broadcastId = `bcast_${Date.now()}`;
     const batch = writeBatch(db);
 
-    // 1. Create Master Broadcast Record
     const masterRef = doc(db, COLLECTIONS.BROADCASTS, broadcastId);
     batch.set(masterRef, {
       id: broadcastId,
@@ -215,13 +214,12 @@ export const dataService = {
       sentToCount: recipients.length
     });
 
-    // 2. Create Individual Notifications
     recipients.forEach(u => {
       const notifId = `broadcast_${broadcastId}_${u.id}`;
       const notifRef = doc(db, COLLECTIONS.NOTIFS, notifId);
       batch.set(notifRef, {
         id: notifId,
-        broadcastId: broadcastId, // Linked for summary metrics
+        broadcastId: broadcastId,
         userId: u.id,
         title: `📢 ${title}`,
         message,
@@ -242,19 +240,46 @@ export const dataService = {
       const querySnapshot = await getDocs(q);
       const broadcasts = querySnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       
-      // Enrich with real-time stats from notifications
       const enriched = await Promise.all(broadcasts.map(async (b) => {
-        const nQuery = query(collection(db, COLLECTIONS.NOTIFS), where('broadcastId', '==', b.id));
-        const nSnapshot = await getDocs(nQuery);
-        const openedCount = nSnapshot.docs.filter(d => d.data().isRead === true).length;
-        return {
-          ...b,
-          openedCount
-        };
+        try {
+          const nQuery = query(collection(db, COLLECTIONS.NOTIFS), where('broadcastId', '==', b.id), where('isRead', '==', true));
+          const nSnapshot = await getDocs(nQuery);
+          return { ...b, openedCount: nSnapshot.size };
+        } catch (e) {
+          return { ...b, openedCount: 0 };
+        }
       }));
       
       return enriched;
     } catch (err) { return []; }
+  },
+
+  listenToBroadcasts: (callback: (broadcasts: any[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.BROADCASTS), orderBy('timestamp', 'desc'));
+    return onSnapshot(q, async (snapshot) => {
+      const baseBroadcasts = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      
+      // Fetch stats independently to avoid blocking the main UI list
+      const enriched = await Promise.all(baseBroadcasts.map(async (b) => {
+        try {
+          // Optimized query using index: broadcastId + isRead
+          const nQuery = query(
+            collection(db, COLLECTIONS.NOTIFS), 
+            where('broadcastId', '==', b.id), 
+            where('isRead', '==', true)
+          );
+          const nSnapshot = await getDocs(nQuery);
+          return { ...b, openedCount: nSnapshot.size };
+        } catch (e) {
+          console.warn(`[BroadcastMetrics] Error for ${b.id}:`, e);
+          return { ...b, openedCount: 0 };
+        }
+      }));
+      
+      callback(enriched);
+    }, (error) => {
+      console.error("[BroadcastListener] Critical snapshot error:", error);
+    });
   },
 
   // REVIEWS

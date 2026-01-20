@@ -1,8 +1,8 @@
-
 import * as firebaseAuth from 'firebase/auth';
 import { auth, googleProvider, isFirebaseConfigured } from './services/firebase';
 import { User, UserRole } from '../types';
 import { dataService } from './services/dataService';
+import { getCurrentLocation } from '../Functions/placesfield';
 
 // Fixed: Using namespaced imports and destructuring to resolve missing exported member errors for auth functions.
 const { 
@@ -13,6 +13,23 @@ const {
   onAuthStateChanged,
   sendPasswordResetEmail
 } = firebaseAuth as any;
+
+const captureSignupLocation = async () => {
+  try {
+    const coords = await getCurrentLocation();
+    return {
+      lat: coords.lat,
+      lng: coords.lng,
+      name: 'Signup Location (Detected)'
+    };
+  } catch (e) {
+    return {
+      lat: 25.185,
+      lng: 55.275,
+      name: 'Dubai, UAE (Default)'
+    };
+  }
+};
 
 export const authService = {
   signIn: async (email: string, password: string): Promise<User | null> => {
@@ -29,13 +46,15 @@ export const authService = {
       const dbUser = await dataService.getUserById(firebaseUser.uid);
       
       if (!dbUser) {
+        const locationData = await captureSignupLocation();
         const fallbackUser: User = {
           id: firebaseUser.uid,
           name: firebaseUser.displayName || 'Marketplace User',
           email: firebaseUser.email || email,
           role: UserRole.CUSTOMER,
           avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(firebaseUser.displayName || 'User')}&background=5B3D9D&color=fff`,
-          locationName: 'Dubai, UAE',
+          location: { lat: locationData.lat, lng: locationData.lng },
+          locationName: locationData.name,
           createdAt: new Date().toISOString(),
           lastLoginAt: new Date().toISOString()
         };
@@ -66,13 +85,15 @@ export const authService = {
       let dbUser = await dataService.getUserById(firebaseUser.uid);
       
       if (!dbUser) {
+        const locationData = await captureSignupLocation();
         dbUser = {
           id: firebaseUser.uid,
           name: firebaseUser.displayName || 'New User',
           email: firebaseUser.email || '',
           role: UserRole.CUSTOMER,
           avatar: firebaseUser.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(firebaseUser.displayName || 'User')}`,
-          locationName: 'Dubai, UAE',
+          location: { lat: locationData.lat, lng: locationData.lng },
+          locationName: locationData.name,
           createdAt: new Date().toISOString(),
           lastLoginAt: new Date().toISOString()
         };
@@ -94,13 +115,16 @@ export const authService = {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const firebaseUser = userCredential.user;
       if (!firebaseUser) throw new Error("Registration failed.");
+      
+      const locationData = await captureSignupLocation();
       const newUser: User = {
         id: firebaseUser.uid,
         name,
         email,
         role: UserRole.CUSTOMER,
         avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=5B3D9D&color=fff`,
-        locationName: 'Dubai, UAE',
+        location: { lat: locationData.lat, lng: locationData.lng },
+        locationName: locationData.name,
         createdAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString()
       };

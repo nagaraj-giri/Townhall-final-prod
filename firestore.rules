@@ -54,6 +54,11 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // --- BROADCASTS ---
+    match /broadcasts/{broadcastId} {
+      allow read, write: if isAdmin();
+    }
+
     // --- MESSAGING FLOW ---
 
     match /chats/{roomId} {
@@ -63,7 +68,6 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /history/{messageId} {
-        // Optimized: Check document fields directly to avoid parent 'get' calls which can fail or be throttled
         allow read: if isSignedIn() && (
           request.auth.uid == resource.data.recipientId || 
           request.auth.uid == resource.data.senderId || 
@@ -71,23 +75,20 @@ service cloud.firestore {
         );
         
         allow create: if isSignedIn() && (
-          // Use request.resource.data for incoming data validation
           request.auth.uid == request.resource.data.senderId
         ) && (
           (isCustomer()) || (isProvider() && exists(/databases/$(database)/documents/chats/$(roomId)))
         );
         
-        // Allow recipient or Admin to mark message as read
         allow update: if isSignedIn() && (
           request.auth.uid == resource.data.recipientId || isAdmin()
         ) && (
-          // Ensure only the status field is being modified
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
         );
       }
     }
 
-    // Collection Group Queries (Total Unread Message Count)
+    // Collection Group Queries
     match /{path=**}/history/{messageId} {
       allow read: if isSignedIn() && (
         request.auth.uid == resource.data.recipientId || 
@@ -97,6 +98,7 @@ service cloud.firestore {
     }
 
     match /notifications/{notifId} {
+      // Allow users to see their own notifications, Admins can see all for broadcast stats
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isSignedIn();
       allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());

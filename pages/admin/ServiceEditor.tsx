@@ -40,6 +40,27 @@ const AdminServiceEditor: React.FC = () => {
     { label: 'Home Services', icon: 'home_repair_service' },
     { label: 'Financial Services', icon: 'account_balance' },
     { label: 'Real Estate', icon: 'apartment' },
+    { label: 'Cleaning Services', icon: 'cleaning_services' },
+    { label: 'Healthcare', icon: 'medical_services' },
+    { label: 'IT & Tech', icon: 'computer' },
+    { label: 'Security', icon: 'security' },
+    { label: 'Food & Beverage', icon: 'restaurant' },
+    { label: 'Education', icon: 'school' },
+    { label: 'Event Planning', icon: 'event' },
+    { label: 'Auto Services', icon: 'directions_car' },
+    { label: 'Fitness', icon: 'fitness_center' },
+    { label: 'Beauty & Wellness', icon: 'spa' },
+    { label: 'Pet Care', icon: 'pets' },
+    { label: 'Marketing', icon: 'campaign' },
+    { label: 'Photography', icon: 'photo_camera' },
+    { label: 'Construction', icon: 'construction' },
+    { label: 'Electrician', icon: 'electric_bolt' },
+    { label: 'Plumbing', icon: 'water_drop' },
+    { label: 'Handyman', icon: 'handyman' },
+    { label: 'Retail', icon: 'shopping_bag' },
+    { label: 'Luxury Services', icon: 'diamond' },
+    { label: 'Language', icon: 'language' },
+    { label: 'Customer Care', icon: 'support_agent' },
   ];
 
   useEffect(() => {
@@ -102,7 +123,7 @@ const AdminServiceEditor: React.FC = () => {
   };
 
   const getIconLabel = (iconName: string) => {
-    return commonIcons.find(i => i.icon === iconName)?.label || 'Travel & Flights';
+    return commonIcons.find(i => i.icon === iconName)?.label || 'Other';
   };
 
   if (isLoading) return (
@@ -170,9 +191,16 @@ const AdminServiceEditor: React.FC = () => {
                 <button onClick={() => setIsIconPickerOpen(!isIconPickerOpen)} className="px-5 py-2.5 bg-white border border-gray-100 rounded-xl text-[12px] font-bold text-text-dark shadow-sm active:scale-95 transition-all shrink-0">Change</button>
              </div>
              {isIconPickerOpen && (
-               <div className="grid grid-cols-5 gap-3 p-4 bg-gray-50 rounded-2xl animate-in fade-in zoom-in-95">
+               <div className="grid grid-cols-5 gap-3 p-4 bg-gray-50 rounded-2xl animate-in fade-in zoom-in-95 max-h-60 overflow-y-auto no-scrollbar border border-gray-100">
                   {commonIcons.map(item => (
-                    <button key={item.icon} onClick={() => { setForm({...form, icon: item.icon}); setIsIconPickerOpen(false); }} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${form.icon === item.icon ? 'bg-primary text-white shadow-md' : 'bg-white text-gray-400 border border-gray-100'}`}><span className="material-symbols-outlined text-xl">{item.icon}</span></button>
+                    <button 
+                      key={item.icon} 
+                      onClick={() => { setForm({...form, icon: item.icon}); setIsIconPickerOpen(false); }} 
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all ${form.icon === item.icon ? 'bg-primary text-white shadow-md' : 'bg-white text-gray-400 border border-gray-100'}`}
+                      title={item.label}
+                    >
+                      <span className="material-symbols-outlined text-xl">{item.icon}</span>
+                    </button>
                   ))}
                </div>
              )}
