@@ -54,6 +54,8 @@ async function notifyUser({userId, title, message, type = 'INFO', actionUrl = ''
  */
 exports.onRFQCreated = functions.firestore.document('rfqs/{rfqId}').onCreate(async (snap) => {
   const rfq = snap.data();
+  const displayLoc = (rfq.locationName || 'Dubai, UAE').split(',')[0];
+  
   const providers = await db.collection('users')
     .where('role', '==', 'PROVIDER')
     .where('services', 'array-contains', rfq.service)
@@ -63,7 +65,7 @@ exports.onRFQCreated = functions.firestore.document('rfqs/{rfqId}').onCreate(asy
     notifyUser({
       userId: doc.id,
       title: '🎯 NEW LEAD MATCHED',
-      message: `A client needs "${rfq.title}" near ${rfq.locationName.split(',')[0]}.`,
+      message: `A client needs "${rfq.title}" near ${displayLoc}.`,
       type: 'SUCCESS',
       actionUrl: `/rfq/${rfq.id}`
     })

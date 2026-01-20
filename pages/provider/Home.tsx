@@ -79,7 +79,7 @@ const Home: React.FC<HomeProps> = ({ user }) => {
           <img src={user.avatar} className="w-12 h-12 rounded-2xl object-cover border-2 border-white shadow-sm" alt="" />
           <div>
             <p className="text-[10px] text-text-light font-normal uppercase tracking-widest leading-none mb-0.5 opacity-60">PROVIDER PORTAL</p>
-            <h1 className="text-lg font-black text-text-dark leading-none">Salam, {user.name.split(' ')[0]}</h1>
+            <h1 className="text-lg font-black text-text-dark leading-none">Salam, {(user.name || 'User').split(' ')[0]}</h1>
           </div>
         </div>
         <button onClick={() => toggleNotifications(true)} className="relative w-11 h-11 rounded-[1.2rem] bg-white flex items-center justify-center shadow-card border border-gray-100">

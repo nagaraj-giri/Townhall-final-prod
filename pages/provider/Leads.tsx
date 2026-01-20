@@ -145,7 +145,8 @@ const Leads: React.FC<LeadsProps> = ({ user }) => {
             currentList.map((rfq) => {
               const myQuote = myQuotes.find(q => q.rfqId === rfq.id);
               const dist = (user.location && rfq.lat) ? calculateDistance(user.location.lat, user.location.lng, rfq.lat, rfq.lng).toFixed(1) : '?';
-              
+              const displayLoc = (rfq.locationName || 'Dubai, UAE').split(',')[0];
+
               return (
                 <div 
                   key={rfq.id} 
@@ -159,7 +160,7 @@ const Leads: React.FC<LeadsProps> = ({ user }) => {
                       </div>
                       <div>
                         <h2 className="text-sm font-black text-text-dark leading-tight uppercase truncate max-w-[160px]">{rfq.title}</h2>
-                        <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tight">{rfq.category} • {rfq.locationName.split(',')[0]}</p>
+                        <p className="text-[10px] text-gray-400 font-bold mt-1 uppercase tracking-tight">{rfq.category} • {displayLoc}</p>
                       </div>
                     </div>
                     <div className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider ${
@@ -206,22 +207,22 @@ const Leads: React.FC<LeadsProps> = ({ user }) => {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.04)]">
-        <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-60">
+        <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-60">
           <span className="material-symbols-outlined text-[28px] font-normal">home</span>
           <span className="text-[9px] font-black uppercase tracking-widest">HOME</span>
         </button>
-        <button className="flex-1 flex flex-col items-center gap-1.5 text-primary">
+        <button className="flex-1 flex flex-col items-center gap-1 text-primary">
           <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-xl">
              <span className="material-symbols-outlined text-[28px] font-normal">grid_view</span>
           </div>
           <span className="text-[9px] font-black uppercase tracking-widest">LEADS</span>
         </button>
-        <button onClick={() => navigate('/messages')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-60 relative">
+        <button onClick={() => navigate('/messages')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-60 relative">
           <span className="material-symbols-outlined text-[28px] font-normal">chat_bubble</span>
           {chatUnreadCount > 0 && <div className="absolute top-0 right-3 w-4 h-4 bg-accent-pink rounded-full border-2 border-white text-[8px] font-black text-white flex items-center justify-center">{chatUnreadCount > 9 ? '9+' : chatUnreadCount}</div>}
           <span className="text-[9px] font-black uppercase tracking-widest">CHAT</span>
         </button>
-        <button onClick={() => navigate('/profile')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-60">
+        <button onClick={() => navigate('/profile')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-60">
           <span className="material-symbols-outlined text-[28px] font-normal">person</span>
           <span className="text-[9px] font-black uppercase tracking-widest">PROFILE</span>
         </button>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { dataService } from './services/dataService';
@@ -71,7 +70,7 @@ const ProviderRegistration: React.FC = () => {
       showToast("Application submitted successfully!", "success");
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {
-      showToast("Submission failed", "error");
+      showToast("Submission failed. Check your network.", "error");
     } finally {
       setIsLoading(false);
     }
@@ -87,28 +86,28 @@ const ProviderRegistration: React.FC = () => {
           <div className="w-16 h-16 bg-primary/10 text-primary rounded-3xl flex items-center justify-center shadow-sm">
              <span className="material-symbols-outlined text-3xl font-black">storefront</span>
           </div>
-          <h1 className="text-2xl font-black text-text-dark tracking-tighter uppercase">Provider Application</h1>
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Join the UAE's Elite Service Network</p>
+          <h1 className="text-2xl font-black text-text-dark tracking-tighter uppercase">Provider Registration</h1>
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Verified Dubai Business Network</p>
         </header>
 
         <form onSubmit={handleSubmit} className="bg-white rounded-[3rem] p-8 shadow-soft border border-gray-100 space-y-6">
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest ml-1">Business Name *</label>
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Trade License Name *</label>
               <input 
                 required
                 className="w-full px-6 py-4 bg-gray-50 border-none rounded-full text-sm font-bold text-text-dark focus:ring-1 focus:ring-primary outline-none shadow-inner"
-                placeholder="Trade License Name"
+                placeholder="Official Entity Name"
                 value={form.businessName}
                 onChange={e => setForm({...form, businessName: e.target.value})}
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest ml-1">Primary Location *</label>
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Base of Operations *</label>
               <div className="bg-gray-50 rounded-full px-6 min-h-[56px] overflow-hidden shadow-inner flex items-center border border-gray-100 pointer-events-auto">
                  <PlacesField 
-                  placeholder="Search UAE Area..."
+                  placeholder="Select Dubai District (e.g. Marina)"
                   onPlaceChange={(res) => {
                     setForm(prev => ({ 
                       ...prev, 
@@ -122,7 +121,7 @@ const ProviderRegistration: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest ml-1">Services Offered *</label>
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Service Core *</label>
               <div className="relative">
                 <button
                   type="button"
@@ -130,7 +129,7 @@ const ProviderRegistration: React.FC = () => {
                   className="w-full px-6 py-4 bg-gray-50 border-none rounded-full text-sm font-bold text-text-dark flex items-center justify-between shadow-inner transition-all hover:bg-gray-100"
                 >
                   <span className={form.selectedServices.length === 0 ? 'text-gray-300' : 'text-text-dark'}>
-                    {form.selectedServices.length === 0 ? "Select Services" : `${form.selectedServices.length} selected`}
+                    {form.selectedServices.length === 0 ? "Identify Specialties" : `${form.selectedServices.length} Selected`}
                   </span>
                   <span className={`material-symbols-outlined transition-transform duration-300 ${isServiceDropdownOpen ? 'rotate-180' : ''}`}>expand_more</span>
                 </button>
@@ -142,7 +141,7 @@ const ProviderRegistration: React.FC = () => {
                       <div className="grid grid-cols-1 gap-1">
                         {categories.map(cat => (
                           <div key={cat.id} onClick={() => toggleService(cat.name)} className={`flex items-center justify-between p-4 rounded-2xl transition-all cursor-pointer ${form.selectedServices.includes(cat.name) ? 'bg-primary/5' : 'hover:bg-gray-50'}`}>
-                            <span className={`text-xs font-bold uppercase tracking-tight ${form.selectedServices.includes(cat.name) ? 'text-primary' : 'text-text-dark'}`}>{cat.name}</span>
+                            <span className={`text-[10px] font-black uppercase tracking-widest ${form.selectedServices.includes(cat.name) ? 'text-primary' : 'text-text-dark'}`}>{cat.name}</span>
                             <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${form.selectedServices.includes(cat.name) ? 'bg-primary border-primary' : 'bg-white border-gray-200'}`}>
                               {form.selectedServices.includes(cat.name) && <span className="material-symbols-outlined text-white text-[18px] font-black">check</span>}
                             </div>
@@ -156,7 +155,7 @@ const ProviderRegistration: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest ml-1">WhatsApp Number *</label>
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Contact WhatsApp *</label>
               <div className="relative flex items-center bg-gray-50 rounded-full overflow-hidden shadow-inner">
                 <div className="px-4 py-4 flex items-center gap-2 border-r border-gray-200 shrink-0 bg-white/50">
                   <img src="https://flagcdn.com/w20/ae.png" className="w-4 h-3 object-cover rounded-[1px] shadow-sm" alt="" />
@@ -165,7 +164,7 @@ const ProviderRegistration: React.FC = () => {
                 <input 
                   required
                   className="w-full px-5 py-4 bg-transparent border-none text-sm font-bold text-text-dark focus:ring-0 outline-none"
-                  placeholder="50 123 4567"
+                  placeholder="50 000 0000"
                   value={form.whatsapp}
                   onChange={e => setForm({...form, whatsapp: e.target.value})}
                 />
@@ -173,12 +172,12 @@ const ProviderRegistration: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-gray-400 uppercase tracking-widest ml-1">Business Email *</label>
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Corporate Email *</label>
               <input 
                 required
                 type="email"
                 className="w-full px-5 py-4 bg-gray-50 border-none rounded-full text-sm font-bold text-text-dark focus:ring-1 focus:ring-primary outline-none shadow-inner"
-                placeholder="contact@business.ae"
+                placeholder="office@business.ae"
                 value={form.email}
                 onChange={e => setForm({...form, email: e.target.value})}
               />
@@ -188,9 +187,9 @@ const ProviderRegistration: React.FC = () => {
           <button 
             type="submit"
             disabled={isLoading}
-            className="w-full bg-gradient-to-r from-primary via-[#7B5CC4] to-[#A073E2] text-white py-5 rounded-full font-bold text-sm shadow-xl shadow-purple-100 flex items-center justify-center gap-3 transform active:scale-[0.98] transition-all disabled:opacity-50"
+            className="w-full bg-gradient-to-r from-primary to-[#7B5CC4] text-white py-5 rounded-full font-black uppercase tracking-[0.2em] text-[12px] shadow-xl shadow-purple-100 flex items-center justify-center gap-3 transform active:scale-[0.98] transition-all disabled:opacity-50"
           >
-            {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : 'Submit Application'}
+            {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : 'Verify & Join'}
           </button>
         </form>
       </div>

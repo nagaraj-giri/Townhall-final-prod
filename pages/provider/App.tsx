@@ -27,6 +27,7 @@ import AdminRFQDetail from '../admin/RFQDetail';
 
 /**
  * Robust serialization to handle circular references and complex library objects.
+ * Standardized across both App entry points.
  */
 const safeStringify = (obj: any) => {
   const cache = new WeakSet();
@@ -37,7 +38,13 @@ const safeStringify = (obj: any) => {
         if (
           value instanceof Node || 
           value.nodeType || 
-          (value.constructor && (value.constructor.name === 'Mt' || value.constructor.name === 'e' || value.constructor.name.includes('Element'))) ||
+          (value.constructor && (
+            value.constructor.name === 'Mt' || 
+            value.constructor.name === 'e' || 
+            value.constructor.name.includes('Element') ||
+            value.constructor.name.includes('Map') ||
+            ['Q$1', 'Sa'].includes(value.constructor.name)
+          )) ||
           (value.host && (value.renderOptions || value._renderOptions)) ||
           key === 'pickerRef' || key === 'loaderRef'
         ) {

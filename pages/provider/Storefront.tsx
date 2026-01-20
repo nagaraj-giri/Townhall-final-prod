@@ -20,7 +20,9 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reviews, setReviews] = useState<EnrichedReview[]>([]);
-  const [stats, setStats] = useState({ rating: '4.9', reviewCount: 128, response: '1h' });
+  
+  // Fixed: Initialized response to "---" to avoid mock data.
+  const [stats, setStats] = useState({ rating: 'N/A', reviewCount: 0, response: '---' });
 
   const targetId = id || loggedInUser.id;
   const isOwnProfile = loggedInUser.id === targetId;
@@ -37,7 +39,6 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
   useEffect(() => {
     if (!profileUser) return;
 
-    // Real-time listener for reviews to ensure the storefront is always up-to-date
     const unsubReviews = dataService.listenToReviewsByProvider(profileUser.id, async (revs) => {
       const allUsers = await dataService.getUsers();
       const enriched: EnrichedReview[] = revs.map(r => {
@@ -56,6 +57,12 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
           ...prev, 
           rating: avg.toFixed(1),
           reviewCount: revs.length
+        }));
+      } else {
+        setStats(prev => ({ 
+          ...prev, 
+          rating: 'N/A',
+          reviewCount: 0
         }));
       }
     });
@@ -97,12 +104,11 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
         <h1 className="text-[16px] font-bold text-text-dark tracking-tight">Store Profile</h1>
         <button onClick={() => toggleNotifications(true)} className="relative w-11 h-11 bg-white rounded-2xl shadow-sm flex items-center justify-center text-text-dark active:scale-95 transition-transform">
           <span className="material-symbols-outlined text-[22px]">notifications</span>
-          {unreadCount > 0 && <div className="absolute top-2.5 right-2.5 w-2 h-2 bg-accent-pink rounded-full border-2 border-white shadow-sm"></div>}
+          {unreadCount > 0 && <div className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-accent-pink rounded-full border-2 border-white shadow-sm"></div>}
         </button>
       </header>
 
       <main className="px-6 space-y-6 overflow-y-auto no-scrollbar pb-10">
-        {/* Main Identity Card */}
         <div className="bg-white rounded-3xl p-6 shadow-soft flex items-center gap-5 relative overflow-hidden">
           <div className="relative">
             <div className="w-20 h-20 bg-[#1F4547] rounded-[1.8rem] flex items-center justify-center border border-gray-100/10 overflow-hidden shadow-lg">
@@ -118,7 +124,7 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-[17px] font-black text-text-dark leading-tight tracking-tight uppercase">{profileUser.name}</h2>
-            <p className="text-[11px] text-gray-400 font-bold mt-1 uppercase tracking-tight">{profileUser.services?.[0] || 'Premium Services'}</p>
+            <p className="text-[11px] text-gray-400 font-bold mt-1 uppercase tracking-tight">{profileUser.services?.[0] || ''}</p>
             <div className="flex items-center gap-1 mt-2">
               <span className="material-icons text-[#FFD60A] text-sm">star</span>
               <span className="text-[12px] font-black text-text-dark">{stats.rating}</span>
@@ -126,7 +132,6 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
           </div>
         </div>
 
-        {/* Quick Stats Grid */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white rounded-[1.8rem] p-5 shadow-soft border border-white text-center flex flex-col justify-center gap-1">
              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Response</p>
@@ -134,11 +139,10 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
           </div>
           <div className="bg-white rounded-[1.8rem] p-5 shadow-soft border border-white text-center flex flex-col justify-center gap-1">
              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Rating</p>
-             <p className="text-[20px] font-black text-[#FFD60A]">{stats.rating}/5</p>
+             <p className="text-[20px] font-black text-[#FFD60A]">{stats.rating === 'N/A' ? '---' : `${stats.rating}/5`}</p>
           </div>
         </div>
 
-        {/* About Section */}
         <section className="bg-white rounded-[2rem] p-8 shadow-soft border border-white space-y-4">
            <div className="flex justify-between items-center">
              <h3 className="text-[15px] font-black text-text-dark tracking-tight uppercase">About Us</h3>
@@ -147,15 +151,14 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
              )}
            </div>
            <p className="text-[12px] text-gray-500 font-medium leading-relaxed">
-             {profileUser.description || "We specialize in premium corporate PRO services, golden visas, and luxury travel arrangements in Dubai. Our experts ensure 24/7 support for all your requests."}
+             {profileUser.description || ""}
            </p>
         </section>
 
-        {/* Services Section */}
         <section className="space-y-4">
            <h3 className="text-[15px] font-black text-text-dark tracking-tight uppercase ml-1">Service</h3>
            <div className="flex flex-wrap gap-2">
-              {(profileUser.services?.length ? profileUser.services : ["Visa Service", "Legal Consulting", "Corporate Setup"]).map((s, idx) => (
+              {(profileUser.services || []).map((s, idx) => (
                 <div key={idx} className="bg-primary/5 border border-primary/10 px-5 py-2.5 rounded-2xl text-[10px] font-black text-primary uppercase tracking-tighter shadow-sm">
                   {s}
                 </div>
@@ -163,11 +166,10 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
            </div>
         </section>
 
-        {/* Category Tags Section - UPDATED TO COLORFUL TAGS */}
         <section className="space-y-4">
            <h3 className="text-[15px] font-black text-text-dark tracking-tight uppercase ml-1">Category</h3>
            <div className="flex flex-wrap gap-3">
-              {(profileUser.categories?.length ? profileUser.categories : ["Golden Visa Processing", "Corporate Travel", "Office Setup", "Legal Translation"]).map((cat, idx) => {
+              {(profileUser.categories || []).map((cat, idx) => {
                 const colorClass = tagColors[idx % tagColors.length];
                 return (
                   <div key={idx} className={`${colorClass} border px-5 py-3 rounded-2xl text-[11px] font-black uppercase tracking-tight shadow-sm animate-in zoom-in-95`}>
@@ -178,25 +180,25 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
            </div>
         </section>
 
-        {/* Portfolio Section */}
         <section className="space-y-4">
            <h3 className="text-[15px] font-black text-text-dark tracking-tight uppercase ml-1">Portfolio</h3>
            <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2 snap-x">
-              {(profileUser.gallery?.length ? profileUser.gallery.map((img, idx) => ({ title: `Project ${idx+1}`, img })) : [
-                { title: 'Dubai HQ', img: 'https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=400' },
-                { title: 'Interiors', img: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=400' },
-                { title: 'Units', img: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=400' }
-              ]).map((p, idx) => (
+              {(profileUser.gallery?.length ? profileUser.gallery.map((img, idx) => ({ title: `Project ${idx+1}`, img })) : []).map((p, idx) => (
                 <div key={idx} className="relative w-44 h-56 rounded-3xl overflow-hidden shrink-0 snap-start shadow-md">
                    <img src={p.img} className="w-full h-full object-cover" alt="" />
                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                    <p className="absolute bottom-4 left-4 text-white text-[10px] font-black uppercase tracking-widest">{p.title}</p>
                 </div>
               ))}
+              {!profileUser.gallery?.length && (
+                <div className="w-full py-12 text-center bg-white rounded-3xl border border-dashed border-gray-100 opacity-40">
+                   <span className="material-symbols-outlined text-4xl mb-2">collections</span>
+                   <p className="text-[10px] font-black uppercase tracking-widest">No showcase items yet</p>
+                </div>
+              )}
            </div>
         </section>
 
-        {/* Ratings & Reviews Section */}
         <section className="space-y-5">
            <div className="flex justify-between items-center px-1">
              <h3 className="text-[18px] font-black text-text-dark tracking-tight uppercase">Ratings & Reviews</h3>
@@ -205,21 +207,18 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
 
            <div className="bg-white rounded-3xl p-8 shadow-soft border border-white flex flex-col items-center justify-center text-center space-y-2">
               <div className="bg-[#FFFCEF] w-20 h-20 rounded-2xl flex items-center justify-center border border-[#FFD60A]/10">
-                 <span className="text-[32px] font-black text-[#FFD60A] tracking-tighter">{stats.rating}</span>
+                 <span className="text-[32px] font-black text-[#FFD60A] tracking-tighter">{stats.rating === 'N/A' ? '---' : stats.rating}</span>
               </div>
               <div className="flex gap-0.5 text-[#FFD60A]">
                  {[1, 2, 3, 4, 5].map((s) => (
-                   <span key={s} className="material-icons text-[20px]">star</span>
+                   <span key={s} className={`material-icons text-[20px] ${stats.rating === 'N/A' || s > Number(stats.rating) ? 'opacity-20' : ''}`}>star</span>
                  ))}
               </div>
               <p className="text-[9px] font-black text-gray-300 uppercase tracking-[0.2em] mt-2">BASED ON {stats.reviewCount} REVIEWS</p>
            </div>
 
            <div className="space-y-4">
-              {(reviews.length ? reviews.slice(0, 3) : [
-                { id: '1', customerName: 'Sarah Thompson', customerAvatar: 'https://i.pravatar.cc/100?u=sarah', rating: 5, comment: 'Exceptional service for my Golden Visa! Highly recommend Elite Travel. The team was professional and guided me through every step.', createdAt: new Date().toISOString() },
-                { id: '2', customerName: 'Marcus Chen', customerAvatar: 'https://i.pravatar.cc/100?u=marcus', rating: 5, comment: 'Efficient corporate setup services. They handled all the legal translations and paperwork perfectly. Saved us a lot of time!', createdAt: new Date(Date.now() - 604800000).toISOString() }
-              ]).map((rev: any) => (
+              {reviews.length > 0 ? reviews.slice(0, 3).map((rev: any) => (
                 <div key={rev.id} className="bg-white rounded-3xl p-6 shadow-card border border-white animate-in fade-in duration-500">
                    <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-3">
@@ -239,16 +238,18 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
                      {rev.comment}
                    </p>
                 </div>
-              ))}
+              )) : (
+                <div className="py-12 text-center opacity-30">
+                  <p className="text-[11px] font-bold uppercase tracking-widest">No reviews received yet</p>
+                </div>
+              )}
            </div>
-        </section>
 
-        {/* Business Location Card */}
         <div className="bg-primary rounded-[2.5rem] p-8 text-white space-y-6 shadow-2xl relative overflow-hidden animate-in slide-in-from-bottom-4 duration-700">
           <div className="flex justify-between items-start">
              <div className="flex-1 pr-4">
-               <h4 className="text-xl font-black tracking-tight leading-tight uppercase">{profileUser.locationName?.split(',')[0] || "Business Bay"}</h4>
-               <p className="text-[12px] font-medium text-white/60 mt-1">{profileUser.locationName || "Opus Tower, Office 1204"}</p>
+               <h4 className="text-xl font-black tracking-tight leading-tight uppercase">{profileUser.locationName?.split(',')[0] || "Dubai, UAE"}</h4>
+               <p className="text-[12px] font-medium text-white/60 mt-1">{profileUser.locationName || "Operational Region"}</p>
              </div>
              <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md shadow-lg shrink-0">
                 <span className="material-symbols-outlined text-white text-2xl font-bold">near_me</span>

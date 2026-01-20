@@ -150,12 +150,11 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
                 <h2 className="text-base font-bold text-[#333333]">{rfq.customerName || 'Customer'}</h2>
                 <div className="flex items-center gap-1 text-[#A0A0A0]">
                    <span className="material-symbols-outlined text-[16px] font-bold">location_on</span>
-                   <span className="text-[11px] font-medium">{rfq.locationName.split(',')[0]}</span>
+                   <span className="text-[11px] font-medium">{(rfq.locationName || 'Dubai, UAE').split(',')[0]}</span>
                 </div>
               </div>
            </div>
            
-           {/* Visual Fix for action buttons in Requester Info */}
            <div className="flex gap-3 pt-2">
               <button className="flex-1 bg-[#F2F0F9] py-4 rounded-2xl flex items-center justify-center gap-2 font-black text-primary text-[11px] uppercase tracking-widest active:scale-[0.98] transition-transform">
                  <span className="material-symbols-outlined text-[18px]">call</span> Call
@@ -239,7 +238,7 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
                       <div className="flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-secondary text-[16px] fill-1">star</span>
                         <p className="text-[12px] font-medium text-gray-400">
-                          {quote.providerRating || 4.8}
+                          {quote.providerRating || 0}
                         </p>
                       </div>
                     </div>

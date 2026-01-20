@@ -141,6 +141,16 @@ export const authService = {
     }
     localStorage.removeItem('townhall_user');
   },
+
+  resetPassword: async (email: string) => {
+    if (!isFirebaseConfigured) throw new Error("Cloud Services not configured.");
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (error: any) {
+      console.error("Password reset failed:", error);
+      throw error;
+    }
+  },
   
   onAuthChange: (callback: (user: User | null) => void) => {
     if (!isFirebaseConfigured) return () => {};

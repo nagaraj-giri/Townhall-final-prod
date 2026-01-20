@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, RFQ, UserRole } from '../../types';
@@ -72,7 +73,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     const { users, rfqs } = filteredSets;
     const total = rfqs.length || 1;
     
-    // Exact mapping to status codes in DB
     const getPct = (status: string) => Math.round((rfqs.filter(q => q.status === status).length / total) * 100);
     
     const conversions = rfqs.filter(r => r.status === 'COMPLETED').length;
@@ -80,7 +80,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     const repeatedUsers = users.filter(u => rfqs.filter(r => r.customerId === u.id).length > 1).length;
 
     const generateTrend = (data: any[], dateField: string, buckets: number = 8) => {
-      if (data.length === 0) return Array(buckets).fill(10);
+      // Fixed: Removed the baseline buffer to ensure zero data is shown as zero.
+      if (data.length === 0) return Array(buckets).fill(0);
       const points = Array(buckets).fill(0);
       const now = new Date().getTime();
       const rangeMs = filteredSets.rangeDays * 24 * 60 * 60 * 1000;
@@ -93,7 +94,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           points[(buckets - 1) - bucketIndex]++;
         }
       });
-      return points.map(p => p + 5); 
+      return points; 
     };
 
     return {
@@ -112,14 +113,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
       trends: {
         active: { value: users.length, data: generateTrend(users, 'lastLoginAt') },
         repeated: { value: repeatedUsers, data: generateTrend(users, 'createdAt') },
-        sessions: { value: (users.length * 4.2).toFixed(0), data: [20, 25, 22, 35, 30, 45, 42, 50] },
+        sessions: { value: 0, data: Array(8).fill(0) }, // Default to 0 without session tracking
         conversions: { value: conversions, data: generateTrend(rfqs.filter(r => r.status === 'COMPLETED'), 'createdAt') }
       }
     };
   }, [filteredSets]);
 
   const Sparkline = ({ color, data }: { color: string, data: number[] }) => {
-    const max = Math.max(...data);
+    const max = Math.max(...data, 1);
     const points = data.map((d, i) => `${(i / (data.length - 1)) * 100},${100 - (d / max) * 80}`).join(' ');
     return (
       <svg className="w-full h-10 overflow-visible mt-2" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -250,9 +251,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[26px] font-normal">grid_view</span></div>
           <span className="text-[9px] uppercase tracking-[0.2em] font-normal">HOME</span>
         </button>
-        <button onClick={() => navigate('/admin/users')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all"><span className="material-symbols-outlined text-[26px] font-normal">group</span><span className="text-[9px] uppercase tracking-[0.2em] font-normal">USERS</span></button>
-        <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all"><span className="material-symbols-outlined text-[26px] font-normal">format_list_bulleted</span><span className="text-[9px] uppercase tracking-[0.2em] font-normal">QUERIES</span></button>
-        <button onClick={() => navigate('/profile')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all"><span className="material-symbols-outlined text-[26px] font-normal">person</span><span className="text-[9px] uppercase tracking-[0.2em] font-normal">PROFILE</span></button>
+        <button onClick={() => navigate('/admin/users')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-30 transition-all"><span className="material-symbols-outlined text-[26px] font-normal">group</span><span className="text-[9px] uppercase tracking-[0.2em] font-normal">USERS</span></button>
+        <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-30 transition-all"><span className="material-symbols-outlined text-[26px] font-normal">format_list_bulleted</span><span className="text-[9px] uppercase tracking-[0.2em] font-normal">QUERIES</span></button>
+        <button onClick={() => navigate('/profile')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-30 transition-all"><span className="material-symbols-outlined text-[26px] font-normal">person</span><span className="text-[9px] uppercase tracking-[0.2em] font-normal">PROFILE</span></button>
       </nav>
     </div>
   );

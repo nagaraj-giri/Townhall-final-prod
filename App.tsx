@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, createContext, useContext, useMemo } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { APIProvider } from '@vis.gl/react-google-maps';
@@ -38,12 +37,18 @@ import AdminReviewModeration from './pages/admin/ReviewModeration';
 
 const GOOGLE_MAPS_API_KEY = "AIzaSyAFRh0oVYKee-hPcWKoT2L05LD_XE2VT98";
 
+/**
+ * Robust serialization to handle circular references and complex library objects.
+ * Specifically skips Google Maps internal minified classes (Q$1, Sa, etc.) 
+ * which frequently cause "Converting circular structure to JSON" errors.
+ */
 const safeStringify = (obj: any) => {
   const cache = new WeakSet();
   return JSON.stringify(obj, (key, value) => {
     if (typeof value === 'object' && value !== null) {
       if (cache.has(value)) return; 
       try {
+        // Broad defensive checks for browser internal objects and known Maps API circular types
         if (
           value instanceof Node || 
           value.nodeType || 
@@ -51,14 +56,18 @@ const safeStringify = (obj: any) => {
             value.constructor.name === 'Mt' || 
             value.constructor.name === 'e' || 
             value.constructor.name.includes('Element') ||
-            value.constructor.name === 'Q$1' ||
-            value.constructor.name === 'Sa'
+            value.constructor.name.includes('Map') ||
+            value.constructor.name.includes('Place') ||
+            ['Q$1', 'Sa', 'Mt', 'e'].includes(value.constructor.name)
           )) ||
-          (value.host && (value.renderOptions || value._renderOptions))
+          (value.host && (value.renderOptions || value._renderOptions)) ||
+          key === 'pickerRef' || key === 'loaderRef'
         ) {
           return;
         }
-      } catch (e) { return; }
+      } catch (e) { 
+        return; // If accessing property throws, omit it
+      }
       cache.add(value);
     }
     return value;
@@ -152,7 +161,7 @@ const NotificationsOverlay: React.FC<{
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isReady, setIsReady] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [toast, setToast] = useState<{ message: string; city?: string; type: ToastType } | null>(null);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);

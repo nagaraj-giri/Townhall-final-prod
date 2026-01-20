@@ -56,13 +56,13 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
         setForm(prev => ({ ...prev, mobile: user.phone || '' }));
       }
     }
-  }, [user.phone]);
+    setForm(prev => ({ ...prev, email: user.email || '' }));
+  }, [user.phone, user.email]);
   
   const [categories, setCategories] = useState<string[]>(user.categories || []);
   const [newTag, setNewTag] = useState('');
 
   useEffect(() => {
-    // Real-time data listeners for stats
     const unsubQuotes = dataService.listenToQuotes((allQuotes) => {
       const myQuotes = allQuotes.filter(q => q.providerId === user.id);
       const wins = myQuotes.filter(q => q.status === 'ACCEPTED').length;
@@ -73,7 +73,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
     const unsubReviews = dataService.listenToReviewsByProvider(user.id, (reviews) => {
       const avgRating = reviews.length > 0 
         ? Number((reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1))
-        : (user.rating || 4.9);
+        : 0; 
       setStats(prev => ({ ...prev, rating: avgRating }));
     });
 
@@ -87,7 +87,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
       unsubQuotes();
       unsubReviews();
     };
-  }, [user.id, user.rating]);
+  }, [user.id]);
 
   const handleSaveProfile = async () => {
     try {
@@ -176,7 +176,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
 
   return (
     <div className="flex flex-col min-h-screen pb-32 bg-transparent">
-      {/* Header aligned with screenshot */}
       <header className="px-6 pt-12 pb-4 flex justify-between items-center">
         <button onClick={() => navigate('/')} className="text-text-dark active:scale-95 transition-transform">
           <span className="material-symbols-outlined text-2xl font-bold">grid_view</span>
@@ -189,7 +188,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
       </header>
 
       <main className="flex-1 px-6 space-y-8 overflow-y-auto no-scrollbar pt-2">
-        {/* Profile Section updated for Storefront Redirection and Avatar Management */}
         <div className="flex items-center justify-between relative px-1">
           <div className="flex items-center gap-4">
             <div className="relative cursor-pointer group" onClick={() => avatarInputRef.current?.click()}>
@@ -207,11 +205,11 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
               className="cursor-pointer active:opacity-60 transition-all"
             >
               <h2 className="text-xl font-black text-text-dark leading-none tracking-tight">{user.name}</h2>
-              <p className="text-[10px] text-gray-400 font-bold mt-1.5 uppercase tracking-widest">{user.services?.[0] || 'VISA SERVICES'}</p>
+              <p className="text-[10px] text-gray-400 font-bold mt-1.5 uppercase tracking-widest">{user.services?.[0] || ''}</p>
               <div className="flex items-center gap-3 mt-3">
                 <div className="bg-[#FFF4D8] px-2.5 py-1 rounded-lg flex items-center gap-1 border border-[#FFE4A1]">
                    <span className="text-[10px] font-black text-[#A18100] uppercase tracking-tighter">star</span>
-                   <span className="text-[11px] font-black text-[#A18100]">{stats.rating}</span>
+                   <span className="text-[11px] font-black text-[#A18100]">{stats.rating > 0 ? stats.rating : '---'}</span>
                 </div>
                 <span className="text-[10px] font-black text-[#8BC34A] uppercase tracking-widest">VERIFIED PROVIDER</span>
               </div>
@@ -225,26 +223,25 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
           </button>
         </div>
 
-        {/* Live Stats Cards aligned with screenshot layout */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white/80 backdrop-blur-sm rounded-[2.5rem] p-5 shadow-sm border border-white text-center flex flex-col justify-center min-h-[110px] animate-in fade-in slide-in-from-bottom duration-500">
-            <p className="text-2xl font-black text-text-dark leading-none mb-2">{stats.totalBids}</p>
+          <div className="bg-white/80 backdrop-blur-sm rounded-[2.5rem] p-5 shadow-sm border border-white text-center flex flex-col justify-center min-h-[110px]">
+            <p className="text-2xl font-black text-text-dark leading-none mb-2">{stats.totalBids > 0 ? stats.totalBids : '---'}</p>
             <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-tight">TOTAL BIDS</p>
           </div>
-          <div className="bg-white/80 backdrop-blur-sm rounded-[2.5rem] p-5 shadow-sm border border-white text-center flex flex-col justify-center min-h-[110px] animate-in fade-in slide-in-from-bottom duration-700">
-            <p className="text-2xl font-black text-accent-pink leading-none mb-2">{stats.conversion}%</p>
+          <div className="bg-white/80 backdrop-blur-sm rounded-[2.5rem] p-5 shadow-sm border border-white text-center flex flex-col justify-center min-h-[110px]">
+            <p className="text-2xl font-black text-accent-pink leading-none mb-2">{stats.totalBids > 0 ? `${stats.conversion}%` : '---'}</p>
             <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-tight">% CONVERSION</p>
           </div>
-          <div className="bg-white/80 backdrop-blur-sm rounded-[2.5rem] p-5 shadow-sm border border-white text-center flex flex-col justify-center min-h-[110px] animate-in fade-in slide-in-from-bottom duration-1000">
+          <div className="bg-white/80 backdrop-blur-sm rounded-[2.5rem] p-5 shadow-sm border border-white text-center flex flex-col justify-center min-h-[110px]">
             <div className="flex items-center justify-center gap-1 mb-2">
                <span className="text-[11px] font-black text-accent-green uppercase tracking-tighter">star</span>
-               <p className="text-2xl font-black text-accent-green leading-none">{stats.rating}</p>
+               <p className="text-2xl font-black text-accent-green leading-none">{stats.rating > 0 ? stats.rating : '---'}</p>
             </div>
             <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-tight">OVERALL RATING</p>
           </div>
         </div>
 
-        {/* Gallery Section - EXACTLY AS REQUESTED */}
+        {/* Gallery Section */}
         <section className="space-y-4">
           <div className="flex justify-between items-center px-1">
             <div className="flex items-center gap-2">
@@ -272,15 +269,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
               {(user.gallery || []).map((img, idx) => (
                 <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden group shadow-sm border border-gray-50">
                   <img src={img} className="w-full h-full object-cover" alt={`Portfolio ${idx}`} />
-                  
-                  {/* Overlay Action Buttons matching screenshot */}
                   <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                    <button 
-                      onClick={() => showToast("Image editing is under development", "info")}
-                      className="w-7 h-7 bg-white rounded-full shadow-lg flex items-center justify-center active:scale-90 transition-transform"
-                    >
-                      <span className="material-symbols-outlined text-[14px] text-text-dark font-black">edit</span>
-                    </button>
                     <button 
                       onClick={() => handleDeletePhoto(idx)}
                       className="w-7 h-7 bg-white rounded-full shadow-lg flex items-center justify-center active:scale-90 transition-transform"
@@ -337,7 +326,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                   {isPhoneDropdownOpen && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setIsPhoneDropdownOpen(false)}></div>
-                      <div className="absolute top-16 left-0 w-full max-w-[280px] bg-white border border-gray-100 rounded-[2rem] shadow-2xl p-2 max-h-60 overflow-y-auto no-scrollbar animate-in zoom-in-95 duration-200">
+                      <div className="absolute top-16 left-0 w-full max-w-[280px] bg-white border border-gray-100 rounded-[2rem] shadow-2xl p-2 max-h-64 overflow-y-auto no-scrollbar animate-in zoom-in-95 duration-200">
                         {COUNTRIES.map(c => (
                           <button 
                             key={c.code}
@@ -360,7 +349,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                     <span className="text-[14px] font-black text-text-dark shrink-0">{form.mobileDial}</span>
                     <div className="w-[1px] h-4 bg-gray-200"></div>
                     <input 
-                      type="tel"
+                      type="tel" 
                       className="bg-transparent border-none p-0 text-[14px] font-bold text-text-dark outline-none w-full focus:ring-0" 
                       placeholder="50 123 4567"
                       value={form.mobile}
@@ -419,7 +408,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
           </div>
         </section>
 
-        {/* Service Management Section */}
         <section className="space-y-4 pb-8">
           <h3 className="text-[13px] font-black text-text-dark uppercase tracking-[0.1em] ml-1">Service Management</h3>
           <div className="bg-white rounded-[2.5rem] p-8 shadow-card border border-white space-y-8">
@@ -429,7 +417,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                 <span className="bg-primary/5 text-[8px] font-black text-primary px-2 py-0.5 rounded uppercase">SYSTEM</span>
               </div>
               <div className="flex flex-wrap gap-2 pt-1">
-                {(user.services?.length ? user.services : ["PRO Services", "Company Setup"]).map(s => (
+                {(user.services || []).map(s => (
                   <span key={s} className="bg-gray-50 text-text-dark text-[10px] font-black px-4 py-2.5 rounded-xl border border-gray-100 uppercase tracking-tighter">
                     {s}
                   </span>
@@ -455,7 +443,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                     placeholder="Enter specialty..." 
                     value={newTag}
                     onChange={e => setNewTag(e.target.value)}
-                    onKeyPress={e => e.key === 'Enter' && addTag()}
+                    onKeyPress={(e: any) => e.key === 'Enter' && addTag()}
                   />
                   <button onClick={addTag} className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform">
                     <span className="material-symbols-outlined text-base font-black">add</span>
@@ -469,7 +457,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
         <button onClick={onLogout} className="w-full py-6 text-[10px] font-black text-gray-300 uppercase tracking-[0.3em] hover:text-red-500 transition-colors active:scale-95 text-center">SIGN OUT SESSION</button>
       </main>
 
-      {/* Standardized Bottom Navigation */}
       <nav className="fixed bottom-0 w-full max-w-md mx-auto bg-white/95 backdrop-blur-md border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.04)]">
         <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-60">
           <span className="material-symbols-outlined text-[28px] font-normal">home</span>
@@ -484,7 +471,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
           {chatUnreadCount > 0 && <div className="absolute top-0 right-3 w-4 h-4 bg-accent-pink rounded-full border-2 border-white text-[8px] font-black text-white flex items-center justify-center">{chatUnreadCount > 9 ? '9+' : chatUnreadCount}</div>}
           <span className="text-[9px] font-black uppercase tracking-widest">CHAT</span>
         </button>
-        <button className="flex-1 flex flex-col items-center gap-1.5 text-primary">
+        <button className="flex-1 flex flex-col items-center gap-1 text-primary">
           <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-xl">
              <span className="material-symbols-outlined text-[28px] font-normal">person</span>
           </div>
