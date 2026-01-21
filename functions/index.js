@@ -1,3 +1,4 @@
+
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 
@@ -72,6 +73,62 @@ async function notifyUser({userId, title, message, type = 'INFO', actionUrl = ''
   }
   return null;
 }
+
+/**
+ * TRIGGER: User Updated -> Monitor Provider Service Changes
+ * Detects if an administrator or system process modified a provider's specialized services.
+ */
+exports.onUserUpdated = functions.region('us-central1').firestore.document('users/{userId}').onUpdate(async (change, context) => {
+  const before = change.before.data();
+  const after = change.after.data();
+
+  // Only proceed if the user is a Provider
+  if (after.role !== 'PROVIDER') return null;
+
+  // Detect changes in the 'services' array
+  const oldServices = JSON.stringify(before.services || []);
+  const newServices = JSON.stringify(after.services || []);
+
+  if (oldServices !== newServices) {
+    const providerEmail = after.email;
+    const providerName = after.name;
+
+    // 1. Notify the Provider
+    await queueEmail(
+      providerEmail,
+      `Service Specialization Update - Town Hall UAE`,
+      `<h3>🛠️ Your Service Profile was Updated</h3>
+       <p>Hello ${providerName},</p>
+       <p>An administrator has modified your authorized service categories on the platform.</p>
+       <p><strong>Previous:</strong> ${before.services?.join(', ') || 'None'}</p>
+       <p><strong>Updated:</strong> ${after.services?.join(', ') || 'None'}</p>
+       <p>If you have questions regarding this change, please contact support.</p>
+       <a href="https://townhall-io.web.app/#/profile" style="padding: 10px 20px; background: #5B3D9D; color: white; text-decoration: none; border-radius: 8px;">View Your Profile</a>`
+    );
+
+    // 2. Notify all Admins for the Audit Trail
+    const admins = await db.collection('users').where('role', '==', 'ADMIN').get();
+    const adminNotifs = admins.docs.map(doc => {
+      const adminData = doc.data();
+      return queueEmail(
+        adminData.email,
+        `System Alert: Provider Services Modified`,
+        `<h3>🛡️ Admin Audit Alert</h3>
+         <p>The service profile for <strong>${providerName}</strong> (ID: ${context.params.userId}) has been updated.</p>
+         <ul>
+           <li><strong>New Services:</strong> ${after.services?.join(', ') || 'None'}</li>
+           <li><strong>Timestamp:</strong> ${new Date().toISOString()}</li>
+         </ul>
+         <a href="https://townhall-io.web.app/#/admin/user/${context.params.userId}" style="padding: 10px 20px; background: #5B3D9D; color: white; text-decoration: none; border-radius: 8px;">Audit Provider Record</a>`
+      );
+    });
+
+    await Promise.all(adminNotifs);
+    console.log(`[Audit] Service update email dispatched for provider: ${after.name}`);
+  }
+
+  return null;
+});
 
 /**
  * TRIGGER: New User -> Notify Admins of New Registration

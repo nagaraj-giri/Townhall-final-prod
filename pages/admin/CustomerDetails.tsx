@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { dataService } from '../services/dataService';
@@ -51,7 +52,6 @@ const CustomerDetails: React.FC = () => {
     const rate = total > 0 ? Math.round((accepted / total) * 100) : 0;
     
     // Removing mock duration calculation. 
-    // This value would ideally come from actual project completion logs.
     const actualHrs = 0; 
 
     return { 
@@ -74,13 +74,15 @@ const CustomerDetails: React.FC = () => {
       });
     }
     if (user?.lastLoginAt) {
+      const loginDate = new Date(user.lastLoginAt);
+      const isToday = loginDate.toDateString() === new Date().toDateString();
       logs.push({ 
         title: 'User Login', 
         desc: `System session authenticated`, 
-        time: new Date(user.lastLoginAt), 
+        time: loginDate, 
         color: 'border-primary border-2 bg-white',
-        timeStr: new Date(user.lastLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        dateStr: 'Today'
+        timeStr: loginDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        dateStr: isToday ? 'Today' : loginDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
       });
     }
     rfqs.slice(0, 5).forEach(r => {
@@ -271,7 +273,7 @@ const CustomerDetails: React.FC = () => {
                 </div>
                 <div className="p-5 space-y-1">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Languages</p>
-                  <p className="text-[14px] font-bold text-text-dark">Arabic, English</p>
+                  <p className="text-[14px] font-bold text-text-dark lowercase italic">{user.nationality ? 'Primary Local + English' : 'Not Specified'}</p>
                 </div>
               </div>
            </div>

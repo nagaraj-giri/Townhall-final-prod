@@ -62,6 +62,14 @@ export const dataService = {
     } catch (err) { return null; }
   },
 
+  listenToUserById: (id: string, callback: (user: User | null) => void): Unsubscribe => {
+    return onSnapshot(doc(db, COLLECTIONS.USERS, id), (snapshot) => {
+      callback(snapshot.exists() ? ({ ...snapshot.data(), id: snapshot.id } as User) : null);
+    }, (err) => {
+      console.warn("[DataService] User listener error:", err.message);
+    });
+  },
+
   saveUser: async (user: User) => {
     try { await setDoc(doc(db, COLLECTIONS.USERS, user.id), user, { merge: true }); } 
     catch (e) {}

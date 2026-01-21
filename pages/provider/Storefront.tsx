@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { User, Review, UserRole } from '../../types';
 import { dataService } from '../services/dataService';
@@ -17,23 +18,28 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
   const { id } = useParams();
   const navigate = useNavigate();
   const { showToast, toggleNotifications, unreadCount } = useApp();
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  
   const [profileUser, setProfileUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
   const [reviews, setReviews] = useState<EnrichedReview[]>([]);
   
-  // Fixed: Initialized response to "---" to avoid mock data.
   const [stats, setStats] = useState({ rating: 'N/A', reviewCount: 0, response: '---' });
 
   const targetId = id || loggedInUser.id;
   const isOwnProfile = loggedInUser.id === targetId;
 
+  // Real-time Provider Profile Listener
   useEffect(() => {
-    const fetchData = async () => {
-      const usr = await dataService.getUserById(targetId) as User;
-      setProfileUser(usr);
+    if (!targetId) return;
+    const unsub = dataService.listenToUserById(targetId, (usr) => {
+      if (usr) {
+        setProfileUser(usr as User);
+      }
       setIsLoading(false);
-    };
-    fetchData();
+    });
+    return () => unsub();
   }, [targetId]);
 
   useEffect(() => {
@@ -69,6 +75,25 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
 
     return () => unsubReviews();
   }, [profileUser]);
+
+  const handleAddPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profileUser) return;
+
+    setIsUploading(true);
+    showToast("Syncing portfolio piece...", "info");
+    try {
+      const url = await dataService.uploadImage(file, `gallery/${profileUser.id}/${Date.now()}_${file.name}`);
+      const updatedGallery = [...(profileUser.gallery || []), url];
+      await dataService.saveUser({ ...profileUser, gallery: updatedGallery });
+      showToast("Portfolio updated live", "success");
+    } catch (err) {
+      showToast("Upload failed", "error");
+    } finally {
+      setIsUploading(false);
+      if (galleryInputRef.current) galleryInputRef.current.value = '';
+    }
+  };
 
   const getRelativeTime = (dateString: string) => {
     const now = new Date();
@@ -124,7 +149,7 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-[17px] font-black text-text-dark leading-tight tracking-tight uppercase">{profileUser.name}</h2>
-            <p className="text-[11px] text-gray-400 font-bold mt-1 uppercase tracking-tight">{profileUser.services?.[0] || ''}</p>
+            <p className="text-[11px] text-gray-400 font-bold mt-1 uppercase tracking-tight">{profileUser.services?.[0] || 'Market Professional'}</p>
             <div className="flex items-center gap-1 mt-2">
               <span className="material-icons text-[#FFD60A] text-sm">star</span>
               <span className="text-[12px] font-black text-text-dark">{stats.rating}</span>
@@ -134,8 +159,8 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
 
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white rounded-[1.8rem] p-5 shadow-soft border border-white text-center flex flex-col justify-center gap-1">
-             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Response</p>
-             <p className="text-[20px] font-black text-primary">{stats.response}</p>
+             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Connectivity</p>
+             <p className="text-[20px] font-black text-primary">LIVE</p>
           </div>
           <div className="bg-white rounded-[1.8rem] p-5 shadow-soft border border-white text-center flex flex-col justify-center gap-1">
              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Rating</p>
@@ -144,30 +169,28 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
         </div>
 
         <section className="bg-white rounded-[2rem] p-8 shadow-soft border border-white space-y-4">
+           <div className="space-y-1">
+             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">SERVICES</p>
+             <p className="text-[16px] font-black text-text-dark leading-tight uppercase">
+               {profileUser.services?.[0] || "General Consultancy"}
+             </p>
+           </div>
+        </section>
+
+        <section className="bg-white rounded-[2rem] p-8 shadow-soft border border-white space-y-6">
            <div className="flex justify-between items-center">
-             <h3 className="text-[15px] font-black text-text-dark tracking-tight uppercase">About Us</h3>
+             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">ABOUT US</p>
              {isOwnProfile && (
-               <button onClick={() => navigate('/profile')} className="text-primary text-[10px] font-black uppercase tracking-widest">Edit</button>
+               <button onClick={() => navigate('/profile')} className="text-primary text-[10px] font-black uppercase tracking-widest active:scale-90 transition-transform">Edit</button>
              )}
            </div>
            <p className="text-[12px] text-gray-500 font-medium leading-relaxed">
-             {profileUser.description || ""}
+             {profileUser.description || "Describe your business here to stand out in the marketplace and build trust with new clients."}
            </p>
         </section>
 
         <section className="space-y-4">
-           <h3 className="text-[15px] font-black text-text-dark tracking-tight uppercase ml-1">Service</h3>
-           <div className="flex flex-wrap gap-2">
-              {(profileUser.services || []).map((s, idx) => (
-                <div key={idx} className="bg-primary/5 border border-primary/10 px-5 py-2.5 rounded-2xl text-[10px] font-black text-primary uppercase tracking-tighter shadow-sm">
-                  {s}
-                </div>
-              ))}
-           </div>
-        </section>
-
-        <section className="space-y-4">
-           <h3 className="text-[15px] font-black text-text-dark tracking-tight uppercase ml-1">Category</h3>
+           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">EXPERTISE TAGS</p>
            <div className="flex flex-wrap gap-3">
               {(profileUser.categories || []).map((cat, idx) => {
                 const colorClass = tagColors[idx % tagColors.length];
@@ -177,13 +200,28 @@ const Storefront: React.FC<ProviderStorefrontProps> = ({ user: loggedInUser }) =
                   </div>
                 );
               })}
+              {(!profileUser.categories || profileUser.categories.length === 0) && (
+                <p className="text-[11px] text-gray-300 italic px-1">No expertise tags provided</p>
+              )}
            </div>
         </section>
 
         <section className="space-y-4">
-           <h3 className="text-[15px] font-black text-text-dark tracking-tight uppercase ml-1">Portfolio</h3>
+           <div className="flex justify-between items-center px-1">
+             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Gallery ({profileUser.gallery?.length || 0})</p>
+             {isOwnProfile && (
+               <button 
+                onClick={() => galleryInputRef.current?.click()}
+                disabled={isUploading}
+                className="text-primary text-[10px] font-black uppercase tracking-widest flex items-center gap-1 active:scale-90 transition-transform"
+               >
+                 {isUploading ? "SYNCING..." : "ADD PHOTO"}
+               </button>
+             )}
+             <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" onChange={handleAddPhoto} />
+           </div>
            <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2 snap-x">
-              {(profileUser.gallery?.length ? profileUser.gallery.map((img, idx) => ({ title: `Project ${idx+1}`, img })) : []).map((p, idx) => (
+              {(profileUser.gallery?.length ? profileUser.gallery.map((img, idx) => ({ title: `Project`, img })) : []).map((p, idx) => (
                 <div key={idx} className="relative w-44 h-56 rounded-3xl overflow-hidden shrink-0 snap-start shadow-md">
                    <img src={p.img} className="w-full h-full object-cover" alt="" />
                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>

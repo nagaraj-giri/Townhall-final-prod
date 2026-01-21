@@ -1,3 +1,4 @@
+
 import { useApp } from '../../App';
 import { authService } from '../authService';
 import { dataService } from '../services/dataService';
@@ -237,9 +238,9 @@ const ProviderDetails: React.FC = () => {
               ) : (
                 <h2 className="text-[22px] font-black text-text-dark tracking-tight leading-none uppercase">{user.name || 'UNNAMED PROVIDER'}</h2>
               )}
-              <span className="bg-[#EBE7F5] text-[#5B3D9D] text-[10px] font-black px-2.5 py-1 rounded-md uppercase tracking-tight">AGENCY</span>
+              <span className="bg-[#EBE7F5] text-[#5B3D9D] text-[10px] font-black px-2.5 py-1 rounded-md uppercase tracking-tight">{user.role}</span>
             </div>
-            <p className="text-[12px] font-bold text-gray-400">{user.services?.[0] || 'Uncategorized Provider'}</p>
+            <p className="text-[12px] font-bold text-gray-400">{user.services?.[0] || 'Market Entity'}</p>
           </div>
         </div>
 
