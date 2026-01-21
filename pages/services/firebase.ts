@@ -1,3 +1,4 @@
+
 import * as firebaseApp from "firebase/app";
 import * as firebaseAuth from "firebase/auth";
 import { 
@@ -39,7 +40,11 @@ export const db = initializeFirestore(app, {
 });
 
 export const storage = getStorage(app);
-export const functions = getFunctions(app, "europe-west1");
+
+/**
+ * Updated to 'us-central1' to match the project's 'nam5' database residency.
+ */
+export const functions = getFunctions(app, "us-central1");
 
 export const googleProvider = new GoogleAuthProvider();
 

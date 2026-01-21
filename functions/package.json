@@ -2,6 +2,7 @@
   "name": "functions",
   "description": "Cloud Functions for Town Hall UAE",
   "scripts": {
+    "lint": "eslint .",
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",
@@ -17,6 +18,7 @@
     "firebase-functions": "^4.5.0"
   },
   "devDependencies": {
+    "eslint": "^8.57.0",
     "firebase-functions-test": "^3.1.0"
   },
   "private": true

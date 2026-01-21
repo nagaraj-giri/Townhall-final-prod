@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 
 /**
@@ -9,29 +8,23 @@ export const getAIConciergeSuggestions = async (query: string, locationHint?: st
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   try {
-    // We use gemini-2.5-flash because the PRD requires Maps Grounding for location context.
-    // Note: responseMimeType is not allowed when using googleMaps tool.
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `User is looking for a service in Dubai, UAE. 
+      contents: `Context: A service marketplace in Dubai, UAE. 
       Input: "${query}"
-      Location provided: "${locationHint || 'Not specified'}"
-      
-      Available categories: PRO Services, Travel Agencies, Logistics, Company Setup, Legal, Home Maintenance.
+      Location: "${locationHint || 'Dubai'}"
       
       Task:
-      1. Identify the best category.
-      2. Generate a professional request title.
-      3. Rewrite the description to be detailed for service providers.
-      4. List 2-3 required documents typical for this service in UAE.
-      5. Check if the location "${locationHint}" is a well-known Dubai district or landmark.
+      1. Choose the most relevant category from: PRO Services, Travel Agencies, Logistics, Company Setup, Legal, Home Maintenance.
+      2. Rewrite the title to be professional and standard for UAE government/business entities.
+      3. Rewrite the description to include professional terminology used in Dubai (e.g., 'Trakhees', 'DED', 'Ejari' if relevant).
+      4. List 2-3 required documents standard for this request in the UAE.
       
-      Output format (strictly use this structure):
-      TITLE: [Professional Title]
-      CATEGORY: [Category Name]
-      DESCRIPTION: [Clear detailed description]
-      DOCS: [Doc 1, Doc 2]
-      LOCATION_CHECK: [Confidence message about the Dubai location]`,
+      Output exactly in this format:
+      TITLE: [Rewritten Title]
+      CATEGORY: [Selected Category]
+      DESCRIPTION: [Detailed Professional Description]
+      DOCS: [Doc 1, Doc 2]`,
       config: {
         tools: [{ googleMaps: {} }]
       }
@@ -39,26 +32,16 @@ export const getAIConciergeSuggestions = async (query: string, locationHint?: st
 
     const text = response.text || "";
     
-    // Parse the response manually since JSON mode isn't supported with grounding tools
     const titleMatch = text.match(/TITLE:\s*(.*)/i);
     const catMatch = text.match(/CATEGORY:\s*(.*)/i);
     const descMatch = text.match(/DESCRIPTION:\s*([\s\S]*?)(?=DOCS:|$)/i);
     const docsMatch = text.match(/DOCS:\s*(.*)/i);
-    const locMatch = text.match(/LOCATION_CHECK:\s*(.*)/i);
-
-    // Extract grounding URLs if available (required by system instructions)
-    const groundingLinks = response.candidates?.[0]?.groundingMetadata?.groundingChunks?.map((chunk: any) => ({
-      title: chunk.maps?.title,
-      uri: chunk.maps?.uri
-    })).filter((l: any) => l.uri) || [];
 
     return {
-      suggestedTitle: titleMatch ? titleMatch[1].trim() : "",
-      suggestedCategory: catMatch ? catMatch[1].trim() : "",
-      suggestedDescription: descMatch ? descMatch[1].trim() : "",
-      requiredDocs: docsMatch ? docsMatch[1].split(',').map(s => s.trim()) : [],
-      locationConfidence: locMatch ? locMatch[1].trim() : "",
-      groundingLinks
+      suggestedTitle: titleMatch ? titleMatch[1].trim() : query,
+      suggestedCategory: catMatch ? catMatch[1].trim() : "PRO Services",
+      suggestedDescription: descMatch ? descMatch[1].trim() : query,
+      requiredDocs: docsMatch ? docsMatch[1].split(',').map(s => s.trim()) : []
     };
   } catch (error) {
     console.error("AI Concierge Error:", error);

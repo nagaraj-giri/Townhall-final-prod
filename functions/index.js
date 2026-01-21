@@ -9,7 +9,33 @@ const db = admin.firestore();
 const fcm = admin.messaging();
 
 /**
- * Dispatcher: Writes to Firestore (Bell Tray) and sends FCM Push
+ * EMAIL DISPATCHER
+ * Writes to 'emails' collection for the 'Trigger Email from Firestore' extension.
+ */
+async function queueEmail(to, subject, html, text) {
+  if (!to) return null;
+  try {
+    await db.collection('emails').add({
+      to: to,
+      message: {
+        subject: subject,
+        html: html,
+        text: text || subject
+      },
+      delivery: {
+        state: 'PENDING',
+        startTime: new Date().toISOString()
+      },
+      createdAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[EmailSystem] Error queuing email:', error);
+  }
+  return null;
+}
+
+/**
+ * NOTIFICATION DISPATCHER (Bell Tray + FCM)
  */
 async function notifyUser({userId, title, message, type = 'INFO', actionUrl = ''}) {
   if (!userId) return null;
@@ -17,7 +43,6 @@ async function notifyUser({userId, title, message, type = 'INFO', actionUrl = ''
   try {
     const notifId = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
     
-    // 1. Create document for the Bell Icon Tray
     await db.collection('notifications').doc(notifId).set({
       id: notifId,
       userId: userId,
@@ -29,7 +54,6 @@ async function notifyUser({userId, title, message, type = 'INFO', actionUrl = ''
       actionUrl: actionUrl
     });
 
-    // 2. Send System Push Notification via FCM
     const userDoc = await db.collection('users').doc(userId).get();
     if (userDoc.exists) {
       const userData = userDoc.data();
@@ -50,9 +74,44 @@ async function notifyUser({userId, title, message, type = 'INFO', actionUrl = ''
 }
 
 /**
- * TRIGGER: New Query -> Notify Matching Providers
+ * TRIGGER: New User -> Notify Admins of New Registration
  */
-exports.onRFQCreated = functions.firestore.document('rfqs/{rfqId}').onCreate(async (snap) => {
+exports.onUserCreated = functions.region('us-central1').firestore.document('users/{userId}').onCreate(async (snap) => {
+  const newUser = snap.data();
+  if (newUser.role !== 'CUSTOMER') return null;
+
+  const admins = await db.collection('users').where('role', '==', 'ADMIN').get();
+  
+  const tasks = admins.docs.map(async (doc) => {
+    const adminUser = doc.data();
+    await notifyUser({
+      userId: doc.id,
+      title: '🎉 NEW CUSTOMER ONBOARDED',
+      message: `${newUser.name} has just joined Town Hall UAE.`,
+      type: 'INFO',
+      actionUrl: `/admin/user/${snap.id}`
+    });
+
+    if (adminUser.email) {
+      await queueEmail(
+        adminUser.email,
+        `Growth Alert: New Customer - ${newUser.name}`,
+        `<h3>📈 Platform Growth Update</h3>
+         <p>Hello Admin,</p>
+         <p>A new customer has registered:</p>
+         <ul><li><strong>Name:</strong> ${newUser.name}</li><li><strong>Email:</strong> ${newUser.email}</li></ul>
+         <a href="https://townhall-io.web.app/#/admin/user/${snap.id}" style="padding: 10px 20px; background: #5B3D9D; color: white; text-decoration: none; border-radius: 8px;">View User Record</a>`
+      );
+    }
+  });
+
+  return Promise.all(tasks);
+});
+
+/**
+ * TRIGGER: New Query -> Email & Notify Matching Providers
+ */
+exports.onRFQCreated = functions.region('us-central1').firestore.document('rfqs/{rfqId}').onCreate(async (snap) => {
   const rfq = snap.data();
   const displayLoc = (rfq.locationName || 'Dubai, UAE').split(',')[0];
   
@@ -61,41 +120,68 @@ exports.onRFQCreated = functions.firestore.document('rfqs/{rfqId}').onCreate(asy
     .where('services', 'array-contains', rfq.service)
     .get();
 
-  const notifications = providers.docs.map((doc) => 
-    notifyUser({
+  const tasks = providers.docs.map(async (doc) => {
+    const provider = doc.data();
+    await notifyUser({
       userId: doc.id,
       title: '🎯 NEW LEAD MATCHED',
       message: `A client needs "${rfq.title}" near ${displayLoc}.`,
       type: 'SUCCESS',
       actionUrl: `/rfq/${rfq.id}`
-    })
-  );
+    });
 
-  return Promise.all(notifications);
+    if (provider.email) {
+      await queueEmail(
+        provider.email,
+        `New Lead: ${rfq.title} in ${displayLoc}`,
+        `<h3>🎯 New Opportunity on Town Hall</h3>
+         <p>Hello ${provider.name},</p>
+         <p>A new request matching your services has been posted: "${rfq.title}" in ${rfq.locationName}.</p>
+         <a href="https://townhall-io.web.app/#/rfq/${rfq.id}" style="padding: 10px 20px; background: #5B3D9D; color: white; text-decoration: none; border-radius: 8px;">View Lead Details</a>`
+      );
+    }
+  });
+
+  return Promise.all(tasks);
 });
 
 /**
- * TRIGGER: New Quote -> Notify Customer
+ * TRIGGER: New Quote -> Email & Notify Customer
  */
-exports.onQuoteCreated = functions.firestore.document('quotes/{quoteId}').onCreate(async (snap) => {
+exports.onQuoteCreated = functions.region('us-central1').firestore.document('quotes/{quoteId}').onCreate(async (snap) => {
   const quote = snap.data();
   const rfqSnap = await db.collection('rfqs').doc(quote.rfqId).get();
   if (!rfqSnap.exists) return null;
   
   const rfq = rfqSnap.data();
-  return notifyUser({
+  const customerSnap = await db.collection('users').doc(rfq.customerId).get();
+  const customer = customerSnap.exists ? customerSnap.data() : null;
+
+  await notifyUser({
     userId: rfq.customerId,
     title: '💰 NEW QUOTE RECEIVED',
     message: `${quote.providerName} quoted ${quote.price} AED for your request.`,
     type: 'SUCCESS',
     actionUrl: `/rfq/${rfq.id}`
   });
+
+  if (customer && customer.email) {
+    await queueEmail(
+      customer.email,
+      `Quote Received: ${quote.price} AED for ${rfq.title}`,
+      `<h3>💰 You have a new proposal!</h3>
+       <p>Hello ${customer.name}, <strong>${quote.providerName}</strong> has submitted a quote.</p>
+       <p style="font-size: 18px; font-weight: bold; color: #5B3D9D;">Price: ${quote.price} AED</p>
+       <a href="https://townhall-io.web.app/#/rfq/${rfq.id}" style="padding: 10px 20px; background: #5B3D9D; color: white; text-decoration: none; border-radius: 8px;">Compare Proposals</a>`
+    );
+  }
+  return null;
 });
 
 /**
  * TRIGGER: New Message -> Notify Recipient
  */
-exports.onMessageCreated = functions.firestore.document('chats/{roomId}/history/{msgId}').onCreate(async (snap, context) => {
+exports.onMessageCreated = functions.region('us-central1').firestore.document('chats/{roomId}/history/{msgId}').onCreate(async (snap, context) => {
   const msg = snap.data();
   const roomId = context.params.roomId;
   const participants = roomId.split('_');
@@ -106,31 +192,43 @@ exports.onMessageCreated = functions.firestore.document('chats/{roomId}/history/
   const senderSnap = await db.collection('users').doc(msg.senderId).get();
   const senderName = senderSnap.exists ? senderSnap.data().name : 'Partner';
 
-  return notifyUser({
+  await notifyUser({
     userId: recipientId,
     title: `💬 MESSAGE FROM ${senderName.toUpperCase()}`,
     message: msg.text.length > 50 ? `${msg.text.substring(0, 50)}...` : msg.text,
     type: 'INFO',
     actionUrl: `/messages/${msg.senderId}`
   });
+  return null;
 });
 
 /**
  * TRIGGER: Provider Applied -> Notify Admins
  */
-exports.onProviderRequest = functions.firestore.document('provider_requests/{id}').onCreate(async (snap) => {
+exports.onProviderRequest = functions.region('us-central1').firestore.document('provider_requests/{id}').onCreate(async (snap) => {
   const req = snap.data();
   const admins = await db.collection('users').where('role', '==', 'ADMIN').get();
   
-  const notifications = admins.docs.map((doc) => 
-    notifyUser({
+  const tasks = admins.docs.map(async (doc) => {
+    const adminUser = doc.data();
+    await notifyUser({
       userId: doc.id,
       title: '🏪 NEW BUSINESS VERIFICATION',
       message: `${req.businessName} has applied to join Town Hall.`,
       type: 'URGENT',
       actionUrl: `/admin/provider-request/${snap.id}`
-    })
-  );
+    });
 
-  return Promise.all(notifications);
+    if (adminUser.email) {
+      await queueEmail(
+        adminUser.email,
+        `Action Required: New Provider Application - ${req.businessName}`,
+        `<h3>🛡️ Verification Queue Update</h3>
+         <p>Entity: ${req.businessName}<br>Contact: ${req.contactPerson}</p>
+         <a href="https://townhall-io.web.app/#/admin/provider-request/${snap.id}" style="padding: 10px 20px; background: #FF3B30; color: white; text-decoration: none; border-radius: 8px;">Review Application</a>`
+      );
+    }
+  });
+
+  return Promise.all(tasks);
 });

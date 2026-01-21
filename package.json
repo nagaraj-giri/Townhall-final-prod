@@ -1,8 +1,10 @@
-
 {
   "name": "townhall-uae",
   "version": "1.0.0",
   "description": "Dubai's Premium Service Marketplace",
+  "scripts": {
+    "lint": "eslint ."
+  },
   "dependencies": {
     "@google/genai": "^1.34.0",
     "react": "^19.2.3",
@@ -12,6 +14,7 @@
     "@vis.gl/react-google-maps": "^1.1.0"
   },
   "devDependencies": {
+    "eslint": "^8.57.0",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3"
   }
