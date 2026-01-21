@@ -178,6 +178,33 @@ const App: React.FC = () => {
     setTimeout(() => setToast(null), 4000);
   };
 
+  /**
+   * Sync Favicon with Site Logo
+   * This effect ensures that the browser tab branding matches the 
+   * platform's configured logo in real-time.
+   */
+  useEffect(() => {
+    const syncFavicon = async () => {
+      try {
+        const settings = await dataService.getSettings();
+        if (settings && settings.logo) {
+          const links = document.querySelectorAll("link[rel*='icon'], link[rel='apple-touch-icon']");
+          links.forEach(link => {
+            (link as HTMLLinkElement).href = settings.logo;
+          });
+          // Update manifest theme-color if available in settings
+          if (settings.primaryColor) {
+            const themeMeta = document.querySelector('meta[name="theme-color"]');
+            if (themeMeta) themeMeta.setAttribute('content', settings.primaryColor);
+          }
+        }
+      } catch (e) {
+        console.debug("[App] Favicon sync deferred: ", e);
+      }
+    };
+    syncFavicon();
+  }, []);
+
   useEffect(() => {
     const bootstrap = async () => {
       try {
