@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, UserRole, ServiceCategory } from '../../types';
@@ -18,9 +19,8 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
   const adminAvatarInputRef = useRef<HTMLInputElement>(null);
   
   const [isSaving, setIsSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'system'>('profile'); // Default to profile as per screenshot
+  const [activeTab, setActiveTab] = useState<'profile' | 'system'>('profile'); 
   
-  // Collapsible state for system settings
   const [isSiteOpen, setIsSiteOpen] = useState(false);
   const [isServiceOpen, setIsServiceOpen] = useState(true);
 
@@ -63,6 +63,16 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
         dataService.saveCategories(categories),
         dataService.saveBanners(banners)
       ]);
+      
+      await dataService.createAuditLog({
+        admin: user,
+        title: "Platform Configuration Updated",
+        type: "SYSTEM_CONFIG",
+        severity: "MEDIUM",
+        icon: "settings",
+        iconBg: "bg-primary"
+      });
+
       showToast("System configurations saved", 'success');
     } catch (err: any) {
       showToast("Error saving settings", 'error');
@@ -78,6 +88,16 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
         showToast("Uploading logo...", "info");
         const url = await dataService.uploadImage(file, `system/logo_${Date.now()}`);
         setSettings({ ...settings, logo: url });
+        
+        await dataService.createAuditLog({
+          admin: user,
+          title: "Site Branding Logo Changed",
+          type: "UI_BRANDING",
+          severity: "LOW",
+          icon: "image",
+          iconBg: "bg-blue-500"
+        });
+
         showToast("Logo uploaded", "success");
       } catch (err) {
         showToast("Upload failed", "error");
@@ -122,7 +142,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
       <main className="flex-1 space-y-8 overflow-y-auto no-scrollbar">
         {activeTab === 'profile' ? (
           <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Admin Info Section */}
             <div className="px-8 flex flex-col items-center">
               <div className="relative group">
                 <div 
@@ -149,7 +168,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
               </div>
             </div>
 
-            {/* Metrics Section */}
             <div className="px-6 grid grid-cols-3 gap-3">
               {[
                 { label: 'Total Users', value: statsData.customers + statsData.providers, color: 'text-primary' },
@@ -163,7 +181,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
               ))}
             </div>
 
-            {/* Admin Exclusive Options */}
             <div className="px-8 space-y-4 pt-2">
               <button 
                 onClick={() => navigate('/admin/audit-log')}
@@ -175,7 +192,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
               
               <button 
                 onClick={onLogout} 
-                className="w-full py-5 bg-white border border-gray-100 text-red-500 rounded-[2rem] text-[12px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-soft active:scale-[0.98] transition-all"
+                className="w-full py-5 bg-white border border-red-50 text-red-500 rounded-[2rem] text-[12px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-soft active:scale-[0.98] transition-all"
               >
                 <span className="material-symbols-outlined text-[20px] font-black">logout</span>
                 Sign Out Session
@@ -184,13 +201,11 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
           </div>
         ) : (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300 pb-20">
-            {/* System Management Tab Header */}
             <div className="px-6 flex justify-between items-center mb-2">
               <h2 className="text-xl font-black text-text-dark uppercase tracking-tight">System Config</h2>
             </div>
 
             <div className="px-6 space-y-4">
-              {/* Site Settings Collapsible */}
               <div className="bg-white rounded-[2rem] shadow-card border border-white overflow-hidden">
                 <button 
                   onClick={() => setIsSiteOpen(!isSiteOpen)}
@@ -246,7 +261,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                 )}
               </div>
 
-              {/* Service Categories Section */}
               <div className="bg-white rounded-[2rem] shadow-card border border-white overflow-hidden">
                 <button 
                   onClick={() => setIsServiceOpen(!isServiceOpen)}
@@ -273,7 +287,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                 )}
               </div>
 
-              {/* Save Button for System Tab */}
               <div className="pt-4">
                 <button 
                   onClick={handleSaveAll}
@@ -301,7 +314,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
           <span className="material-symbols-outlined text-[26px] font-normal">format_list_bulleted</span>
           <span className="text-[9px] uppercase tracking-[0.2em] font-normal">QUERIES</span>
         </button>
-        <button className="flex-1 flex flex-col items-center gap-1.5 text-primary">
+        <button className="flex-1 flex flex-col items-center gap-1 text-primary">
           <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-2xl">
             <span className="material-symbols-outlined text-[26px] font-normal">person</span>
           </div>

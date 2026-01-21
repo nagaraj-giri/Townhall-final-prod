@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { dataService } from '../services/dataService';
@@ -5,7 +6,11 @@ import { User, UserRole } from '../../types';
 import ProviderDetails from './ProviderDetails';
 import CustomerDetails from './CustomerDetails';
 
-const AdminUserDetails: React.FC = () => {
+interface Props {
+  adminUser: User;
+}
+
+const AdminUserDetails: React.FC<Props> = ({ adminUser }) => {
   const { id } = useParams();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -13,7 +18,6 @@ const AdminUserDetails: React.FC = () => {
   useEffect(() => {
     const fetchUser = async () => {
       if (id) {
-        // Fix: Explicitly cast result to User to match state type
         const u = await dataService.getUserById(id) as User;
         setUser(u);
         setLoading(false);
@@ -42,9 +46,9 @@ const AdminUserDetails: React.FC = () => {
   }
 
   return user.role === UserRole.PROVIDER ? (
-    <ProviderDetails />
+    <ProviderDetails adminUser={adminUser} />
   ) : (
-    <CustomerDetails />
+    <CustomerDetails adminUser={adminUser} />
   );
 };
 

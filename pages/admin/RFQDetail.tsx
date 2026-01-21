@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { User, RFQ, Quote, RFQStatus, UserRole } from '../../types';
@@ -44,6 +45,17 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
     if (!rfq) return;
     const updated = { ...rfq, ...editForm };
     await dataService.saveRFQ(updated);
+    
+    await dataService.createAuditLog({
+      admin: user,
+      title: `Modified Query: ${rfq.idDisplay}`,
+      type: "CONTENT_MODERATION",
+      severity: "LOW",
+      icon: "edit_note",
+      iconBg: "bg-primary",
+      eventId: rfq.id
+    });
+
     setRfq(updated);
     setIsEditing(false);
     showToast("Query updated successfully", "success");
@@ -53,6 +65,17 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
     if (!rfq) return;
     if (window.confirm("Delete this query? This action cannot be undone.")) {
       await dataService.deleteRFQ(rfq.id);
+      
+      await dataService.createAuditLog({
+        admin: user,
+        title: `Deleted Query: ${rfq.idDisplay}`,
+        type: "CONTENT_MODERATION",
+        severity: "HIGH",
+        icon: "delete_sweep",
+        iconBg: "bg-red-500",
+        eventId: rfq.id
+      });
+
       showToast("Query deleted", "info");
       navigate('/queries');
     }
@@ -100,7 +123,6 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
       </header>
 
       <main className="flex-1 overflow-y-auto no-scrollbar pt-6 px-6 space-y-6">
-        {/* Status Area */}
         <div className="space-y-4">
           <div className="bg-white rounded-[1.5rem] p-5 shadow-sm border border-gray-100">
             <div className="flex justify-between items-center mb-4">
@@ -136,7 +158,6 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
           </div>
         </div>
 
-        {/* Requester Info Card */}
         <div className="bg-white rounded-[2.2rem] p-6 shadow-card border border-gray-100/50 space-y-5">
            <p className="text-[11px] font-bold text-gray-300 uppercase tracking-widest ml-1">Requester Info</p>
            <div className="flex items-center gap-4 cursor-pointer" onClick={() => navigate(`/admin/user/${rfq.customerId}`)}>
@@ -165,7 +186,6 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
            </div>
         </div>
 
-        {/* RFQ Details */}
         <div className="bg-white rounded-[2.5rem] overflow-hidden shadow-card border border-gray-100/50">
            <div className="p-8 space-y-3">
               <h4 className="text-[13px] font-bold text-[#333333] uppercase tracking-wider">Title & Description</h4>
@@ -193,7 +213,6 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
            </div>
         </div>
 
-        {/* Metadata grid */}
         <div className="bg-white rounded-[2rem] p-8 shadow-card border border-gray-100/50">
           <div className="grid grid-cols-2 gap-y-8 gap-x-4">
             <div>
@@ -215,7 +234,6 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
           </div>
         </div>
 
-        {/* Quotes Section */}
         <div className="space-y-4 pt-4">
           <div className="flex justify-between items-center px-1">
             <h3 className="text-[18px] font-bold text-[#333333]">Proposals</h3>

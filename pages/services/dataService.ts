@@ -13,7 +13,8 @@ import {
   orderBy,
   writeBatch,
   increment,
-  limit
+  limit,
+  addDoc
 } from "firebase/firestore";
 import type { Unsubscribe } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -48,6 +49,39 @@ export const dataService = {
   init: async () => {
     if (!isFirebaseConfigured) return;
     getDoc(doc(db, COLLECTIONS.SETTINGS, 'global')).catch(() => {});
+  },
+
+  // AUDIT OPS
+  createAuditLog: async (params: {
+    admin: User;
+    title: string;
+    type: string;
+    severity: 'LOW' | 'MEDIUM' | 'HIGH';
+    icon: string;
+    iconBg: string;
+    eventId?: string;
+  }) => {
+    try {
+      const logRef = collection(db, COLLECTIONS.AUDIT);
+      const entry: AuditLogEntry = {
+        id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        title: params.title,
+        type: params.type,
+        timestamp: new Date().toISOString(),
+        userId: params.admin.id,
+        userName: params.admin.name,
+        userRole: params.admin.role,
+        ip: "Client Session", // Real IP usually captured on server-side
+        device: navigator.userAgent.substring(0, 50),
+        severity: params.severity,
+        eventId: params.eventId || `EV-${Math.floor(1000 + Math.random() * 9000)}`,
+        icon: params.icon,
+        iconBg: params.iconBg
+      };
+      await setDoc(doc(db, COLLECTIONS.AUDIT, entry.id), entry);
+    } catch (e) {
+      console.error("[DataService] Audit logging failed:", e);
+    }
   },
 
   // USER OPS

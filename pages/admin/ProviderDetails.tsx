@@ -6,7 +6,11 @@ import { Quote, Review, ServiceCategory, User } from '../../types';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
-const ProviderDetails: React.FC = () => {
+interface Props {
+  adminUser: User;
+}
+
+const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { showToast } = useApp();
@@ -99,9 +103,21 @@ const ProviderDetails: React.FC = () => {
 
   const handleToggleSuspend = async () => {
     if (!user) return;
-    const updated = { ...user, isBlocked: !user.isBlocked };
+    const isNowBlocked = !user.isBlocked;
+    const updated = { ...user, isBlocked: isNowBlocked };
     try {
       await dataService.saveUser(updated);
+      
+      await dataService.createAuditLog({
+        admin: adminUser,
+        title: `${isNowBlocked ? 'Suspended' : 'Restored'} Provider Access: ${user.name}`,
+        type: "PROVIDER_SECURITY",
+        severity: isNowBlocked ? "HIGH" : "MEDIUM",
+        icon: isNowBlocked ? "block" : "verified_user",
+        iconBg: isNowBlocked ? "bg-red-500" : "bg-accent-green",
+        eventId: user.id
+      });
+
       setUser(updated);
       showToast(updated.isBlocked ? "Account Suspended" : "Account Active", "info");
     } catch (err) {
@@ -123,6 +139,17 @@ const ProviderDetails: React.FC = () => {
     };
     try {
       await dataService.saveUser(updatedUser);
+      
+      await dataService.createAuditLog({
+        admin: adminUser,
+        title: `Updated Provider Business Profile: ${user.name}`,
+        type: "USER_MANAGEMENT",
+        severity: "LOW",
+        icon: "store",
+        iconBg: "bg-blue-500",
+        eventId: user.id
+      });
+
       setUser(updatedUser);
       setIsEditing(false);
       showToast("Profile Updated", "success");
@@ -174,6 +201,30 @@ const ProviderDetails: React.FC = () => {
       showToast("Failed to send reset link", "error");
     } finally {
       setIsSendingReset(false);
+    }
+  };
+
+  const handlePurge = async () => {
+    if (!user) return;
+    if (window.confirm("PERMANENTLY PURGE THIS ACCOUNT? All data will be lost.")) {
+       try {
+         await dataService.deleteUser(user.id);
+         
+         await dataService.createAuditLog({
+           admin: adminUser,
+           title: `PERMANENT PURGE: Provider ${user.name}`,
+           type: "USER_DELETION",
+           severity: "HIGH",
+           icon: "delete_forever",
+           iconBg: "bg-red-600",
+           eventId: user.id
+         });
+
+         showToast("Record Purged", "success");
+         navigate('/admin/users');
+       } catch (err) {
+         showToast("Purge failed", "error");
+       }
     }
   };
 
@@ -505,7 +556,7 @@ const ProviderDetails: React.FC = () => {
         </section>
 
         <button 
-          onClick={() => { if(window.confirm("PERMANENTLY PURGE THIS ACCOUNT?")) dataService.deleteUser(user.id).then(() => navigate('/admin/users')); }}
+          onClick={handlePurge}
           className="w-full py-5 bg-white border border-gray-100 text-red-500 rounded-2xl font-bold text-[13px] flex items-center justify-center gap-3 active:scale-[0.98] transition-all shadow-xs"
         >
           <span className="material-symbols-outlined text-[18px] font-black text-red-500">delete</span>

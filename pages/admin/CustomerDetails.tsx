@@ -6,7 +6,11 @@ import { authService } from '../authService';
 import { User, RFQ } from '../../types';
 import { useApp } from '../../App';
 
-const CustomerDetails: React.FC = () => {
+interface Props {
+  adminUser: User;
+}
+
+const CustomerDetails: React.FC<Props> = ({ adminUser }) => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { showToast } = useApp();
@@ -50,8 +54,6 @@ const CustomerDetails: React.FC = () => {
     const total = rfqs.length;
     const accepted = rfqs.filter(r => r.status === 'ACCEPTED' || r.status === 'COMPLETED').length;
     const rate = total > 0 ? Math.round((accepted / total) * 100) : 0;
-    
-    // Removing mock duration calculation. 
     const actualHrs = 0; 
 
     return { 
@@ -103,6 +105,17 @@ const CustomerDetails: React.FC = () => {
     try {
       const updated = { ...user, ...editForm };
       await dataService.saveUser(updated);
+      
+      await dataService.createAuditLog({
+        admin: adminUser,
+        title: `Customer Profile Modified: ${user.name}`,
+        type: "USER_MANAGEMENT",
+        severity: "LOW",
+        icon: "person_edit",
+        iconBg: "bg-primary",
+        eventId: user.id
+      });
+
       setUser(updated);
       setIsEditing(false);
       showToast("Profile updated", "success");
@@ -113,9 +126,21 @@ const CustomerDetails: React.FC = () => {
 
   const handleToggleSuspend = async () => {
     if (!user) return;
-    const updated = { ...user, isBlocked: !user.isBlocked };
+    const isNowBlocked = !user.isBlocked;
+    const updated = { ...user, isBlocked: isNowBlocked };
     try {
       await dataService.saveUser(updated);
+      
+      await dataService.createAuditLog({
+        admin: adminUser,
+        title: `${isNowBlocked ? 'Suspended' : 'Restored'} Customer Account: ${user.name}`,
+        type: "USER_SECURITY",
+        severity: isNowBlocked ? "HIGH" : "MEDIUM",
+        icon: isNowBlocked ? "block" : "verified_user",
+        iconBg: isNowBlocked ? "bg-red-500" : "bg-accent-green",
+        eventId: user.id
+      });
+
       setUser(updated);
       showToast(updated.isBlocked ? "User Suspended" : "User Restored", "info");
     } catch (e) {
@@ -133,6 +158,30 @@ const CustomerDetails: React.FC = () => {
       showToast("Dispatch failed", "error");
     } finally {
       setIsSendingReset(false);
+    }
+  };
+
+  const handlePurge = async () => {
+    if (!user) return;
+    if (window.confirm("PERMANENTLY PURGE THIS ACCOUNT? All data will be lost.")) {
+       try {
+         await dataService.deleteUser(user.id);
+         
+         await dataService.createAuditLog({
+           admin: adminUser,
+           title: `PERMANENT PURGE: Customer ${user.name}`,
+           type: "USER_DELETION",
+           severity: "HIGH",
+           icon: "delete_forever",
+           iconBg: "bg-red-600",
+           eventId: user.id
+         });
+
+         showToast("Record Purged", "success");
+         navigate('/admin/users');
+       } catch (err) {
+         showToast("Purge failed", "error");
+       }
     }
   };
 
@@ -342,7 +391,7 @@ const CustomerDetails: React.FC = () => {
         </section>
 
         <button 
-          onClick={() => { if(window.confirm("PERMANENTLY PURGE THIS ACCOUNT?")) dataService.deleteUser(user.id).then(() => navigate('/admin/users')); }}
+          onClick={handlePurge}
           className="w-full py-5 bg-white border border-gray-100 text-red-500 rounded-2xl font-bold text-[13px] flex items-center justify-center gap-3 active:scale-[0.98] transition-all shadow-xs"
         >
           <span className="material-symbols-outlined text-[18px] font-black text-red-500">delete</span>

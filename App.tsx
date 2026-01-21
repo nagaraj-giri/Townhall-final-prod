@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect, createContext, useContext, useMemo } from 'react';
-// Fix: Standardize named imports for HashRouter, Routes, Route, Navigate, useNavigate to resolve reported missing member errors.
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { APIProvider } from '@vis.gl/react-google-maps';
 import Login from './pages/Login';
@@ -40,11 +39,6 @@ import AdminAuditLog from './pages/admin/AuditLog';
 
 const GOOGLE_MAPS_API_KEY = "AIzaSyAFRh0oVYKee-hPcWKoT2L05LD_XE2VT98";
 
-/**
- * Robust serialization to handle circular references and complex library objects.
- * Specifically handles Google Maps internal classes (Q$1, Sa, etc.) by safely
- * detecting and filtering them before JSON stringification.
- */
 const safeStringify = (obj: any) => {
   const cache = new WeakSet();
   return JSON.stringify(obj, (key, value) => {
@@ -52,10 +46,7 @@ const safeStringify = (obj: any) => {
       if (cache.has(value)) return; 
       
       try {
-        // Broad check for DOM nodes or browser-internal objects
         if (value instanceof Node || value.nodeType) return;
-
-        // Check constructor names for minified library objects (like Google Maps)
         const constructorName = value.constructor?.name;
         if (constructorName && (
           ['Q$1', 'Sa', 'Mt', 'e'].includes(constructorName) || 
@@ -65,14 +56,10 @@ const safeStringify = (obj: any) => {
         )) {
           return;
         }
-
-        // Check for specific library markers
         if (value.host && (value.renderOptions || value._renderOptions)) return;
         if (key === 'pickerRef' || key === 'loaderRef') return;
-
         cache.add(value);
       } catch (e) {
-        // If property access throws (e.g. cross-origin proxy), skip this branch
         return;
       }
     }
@@ -100,7 +87,6 @@ const NotificationsOverlay: React.FC<{
   onClose: () => void;
   notifications: AppNotification[];
 }> = ({ user, isOpen, onClose, notifications }) => {
-  // useNavigate is used inside HashRouter context in App.tsx
   const navigate = useNavigate();
   const { showToast } = useApp();
 
@@ -131,7 +117,7 @@ const NotificationsOverlay: React.FC<{
             <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-2xl">
               <span className="material-symbols-outlined font-bold">arrow_back</span>
             </button>
-            <h2 className="text-xl font-bold text-text-dark uppercase">Alerts</h2>
+            <h2 className="textxl font-bold text-text-dark uppercase">Alerts</h2>
           </div>
           {notifications.length > 0 && (
             <button onClick={handleMarkAllRead} className="text-[10px] font-bold text-primary uppercase">Clear All</button>
@@ -178,11 +164,6 @@ const App: React.FC = () => {
     setTimeout(() => setToast(null), 4000);
   };
 
-  /**
-   * Sync Favicon with Site Logo
-   * This effect ensures that the browser tab branding matches the 
-   * platform's configured logo in real-time.
-   */
   useEffect(() => {
     const syncFavicon = async () => {
       try {
@@ -192,7 +173,6 @@ const App: React.FC = () => {
           links.forEach(link => {
             (link as HTMLLinkElement).href = settings.logo;
           });
-          // Update manifest theme-color if available in settings
           if (settings.primaryColor) {
             const themeMeta = document.querySelector('meta[name="theme-color"]');
             if (themeMeta) themeMeta.setAttribute('content', settings.primaryColor);
@@ -213,17 +193,14 @@ const App: React.FC = () => {
         if (stored) {
           try {
             const parsed = JSON.parse(stored);
-            // Non-blocking fetch for the user
             dataService.getUserById(parsed.id).then((fresh) => {
               if (fresh) {
                 setUser(fresh);
                 localStorage.setItem('townhall_user', safeStringify(fresh));
               }
             }).catch(() => {
-              // Fallback to local if fetch fails
               setUser(parsed);
             });
-            // Immediately use stored while waiting
             setUser(parsed);
           } catch (e) { localStorage.removeItem('townhall_user'); }
         }
@@ -306,11 +283,11 @@ const App: React.FC = () => {
               <Route path="/leads" element={user?.role === UserRole.PROVIDER ? <ProviderLeads user={user!} /> : <Navigate to="/" />} />
               <Route path="/storefront/:id?" element={user ? <ProviderStorefront user={user!} /> : <Navigate to="/login" />} />
               <Route path="/admin/users" element={user?.role === UserRole.ADMIN ? <AdminUsers /> : <Navigate to="/" />} />
-              <Route path="/admin/user/:id" element={user?.role === UserRole.ADMIN ? <AdminUserDetails /> : <Navigate to="/" />} />
+              <Route path="/admin/user/:id" element={user?.role === UserRole.ADMIN ? <AdminUserDetails adminUser={user!} /> : <Navigate to="/" />} />
               <Route path="/admin/categories" element={user?.role === UserRole.ADMIN ? <AdminCategories /> : <Navigate to="/" />} />
               <Route path="/admin/service/new" element={user?.role === UserRole.ADMIN ? <AdminServiceEditor /> : <Navigate to="/" />} />
               <Route path="/admin/service/edit/:catId" element={user?.role === UserRole.ADMIN ? <AdminServiceEditor /> : <Navigate to="/" />} />
-              <Route path="/admin/provider-request/:id" element={user?.role === UserRole.ADMIN ? <ProviderRequestDetail /> : <Navigate to="/" />} />
+              <Route path="/admin/provider-request/:id" element={user?.role === UserRole.ADMIN ? <ProviderRequestDetail adminUser={user!} /> : <Navigate to="/" />} />
               <Route path="/admin/broadcast" element={user?.role === UserRole.ADMIN ? <AdminBroadcastManager user={user} /> : <Navigate to="/" />} />
               <Route path="/admin/broadcasts" element={user?.role === UserRole.ADMIN ? <AdminBroadcastListing user={user} /> : <Navigate to="/" />} />
               <Route path="/admin/reviews" element={user?.role === UserRole.ADMIN ? <AdminReviewModeration user={user} /> : <Navigate to="/" />} />

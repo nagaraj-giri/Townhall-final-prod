@@ -1,10 +1,15 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { dataService } from '../services/dataService';
-import { ProviderRequest } from '../../types';
+import { User, ProviderRequest } from '../../types';
 import { useApp } from '../../App';
 
-const ProviderRequestDetail: React.FC = () => {
+interface RequestDetailProps {
+  adminUser: User;
+}
+
+const ProviderRequestDetail: React.FC<RequestDetailProps> = ({ adminUser }) => {
   const navigate = useNavigate();
   const { id } = useParams();
   const { showToast } = useApp();
@@ -26,6 +31,17 @@ const ProviderRequestDetail: React.FC = () => {
     setIsProcessing(true);
     try {
       await dataService.updateProviderRequestStatus(request.id, status);
+      
+      await dataService.createAuditLog({
+        admin: adminUser,
+        title: `Provider Application ${status === 'APPROVED' ? 'Approved' : 'Rejected'}`,
+        type: "BUSINESS_VERIFICATION",
+        severity: status === 'APPROVED' ? "MEDIUM" : "LOW",
+        icon: status === 'APPROVED' ? "verified" : "cancel",
+        iconBg: status === 'APPROVED' ? "bg-accent-green" : "bg-red-500",
+        eventId: request.id
+      });
+
       setRequest({ ...request, status });
       showToast(`Application ${status.toLowerCase()} successfully`, "success");
       if (status === 'APPROVED') {
