@@ -36,6 +36,7 @@ import ProviderRequestDetail from './pages/admin/ProviderRequestDetail';
 import AdminBroadcastManager from './pages/admin/BroadcastManager';
 import AdminBroadcastListing from './pages/admin/BroadcastListing';
 import AdminReviewModeration from './pages/admin/ReviewModeration';
+import AdminAuditLog from './pages/admin/AuditLog';
 
 const GOOGLE_MAPS_API_KEY = "AIzaSyAFRh0oVYKee-hPcWKoT2L05LD_XE2VT98";
 
@@ -286,6 +287,7 @@ const App: React.FC = () => {
               <Route path="/admin/broadcast" element={user?.role === UserRole.ADMIN ? <AdminBroadcastManager user={user} /> : <Navigate to="/" />} />
               <Route path="/admin/broadcasts" element={user?.role === UserRole.ADMIN ? <AdminBroadcastListing user={user} /> : <Navigate to="/" />} />
               <Route path="/admin/reviews" element={user?.role === UserRole.ADMIN ? <AdminReviewModeration user={user} /> : <Navigate to="/" />} />
+              <Route path="/admin/audit-log" element={user?.role === UserRole.ADMIN ? <AdminAuditLog /> : <Navigate to="/" />} />
               <Route path="/rfq/:id" element={user ? (user.role === UserRole.ADMIN ? <AdminRFQDetail user={user} /> : user.role === UserRole.PROVIDER ? <ProviderRFQDetail user={user} /> : <CustomerRFQDetail user={user} />) : <Navigate to="/login" />} />
               <Route path="/profile" element={user ? (user.role === UserRole.ADMIN ? <AdminProfile user={user} onLogout={handleLogout} /> : user.role === UserRole.PROVIDER ? <ProviderProfile user={user} onLogout={handleLogout} /> : <CustomerProfile user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} />
             </Routes>

@@ -15,7 +15,6 @@ interface PlacesFieldProps {
 
 /**
  * Reusable Google Places Autocomplete component.
- * Following the exact implementation pattern provided by the user.
  */
 export const PlacesField: React.FC<PlacesFieldProps> = ({ 
   placeholder = "Search area in UAE...", 
@@ -29,10 +28,9 @@ export const PlacesField: React.FC<PlacesFieldProps> = ({
   useEffect(() => {
     if (!placesLibrary || !inputRef.current) return;
 
-    // Pattern from provided snippet
     const options = {
       fields: ['geometry', 'name', 'formatted_address'],
-      componentRestrictions: { country: 'ae' } // Still restricting to UAE for the marketplace use case
+      componentRestrictions: { country: 'ae' }
     };
 
     const autocomplete = new placesLibrary.Autocomplete(inputRef.current, options);
@@ -48,7 +46,6 @@ export const PlacesField: React.FC<PlacesFieldProps> = ({
   useEffect(() => {
     if (!placeAutocomplete) return;
 
-    // Pattern from provided snippet
     const listener = placeAutocomplete.addListener('place_changed', () => {
       const place = placeAutocomplete.getPlace();
       if (place && place.geometry && place.geometry.location) {
@@ -80,7 +77,7 @@ export const PlacesField: React.FC<PlacesFieldProps> = ({
 };
 
 /**
- * Utility: Get user's current GPS coordinates
+ * Utility: Get user's current GPS coordinates with 5s timeout
  */
 export const getCurrentLocation = (): Promise<{lat: number, lng: number}> => {
   return new Promise((resolve, reject) => {
@@ -98,5 +95,40 @@ export const getCurrentLocation = (): Promise<{lat: number, lng: number}> => {
       (error) => reject(error),
       { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
     );
+  });
+};
+
+/**
+ * Utility: Translate coordinates into a Dubai neighborhood name
+ */
+export const reverseGeocode = (lat: number, lng: number): Promise<string> => {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || !window.google || !window.google.maps) {
+      resolve("Dubai, UAE");
+      return;
+    }
+    
+    try {
+      // Fix: Access google through window to resolve TypeScript error 'Cannot find name google'
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ location: { lat, lng } }, (results: any, status: any) => {
+        if (status === 'OK' && results && results[0]) {
+          // Look for neighborhood or sublocality in the address components
+          const neighborhood = results[0].address_components.find((c: any) => 
+            c.types.includes('neighborhood') || c.types.includes('sublocality_level_1')
+          );
+          if (neighborhood) {
+            resolve(`${neighborhood.long_name}, Dubai`);
+          } else {
+            // Fallback to the first part of the formatted address
+            resolve(results[0].formatted_address.split(',')[0] + ', Dubai');
+          }
+        } else {
+          resolve("Dubai, UAE");
+        }
+      });
+    } catch (e) {
+      resolve("Dubai, UAE");
+    }
   });
 };

@@ -33,6 +33,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     fetchLogo();
   }, []);
 
+  /**
+   * Seamless Experience: Warm up geolocation permissions when user intends to join.
+   * This prevents a surprising prompt exactly when they hit the "Join" button.
+   */
+  useEffect(() => {
+    if (activeTab === 'signup') {
+      if ('geolocation' in navigator) {
+        // Silent request to trigger permission prompt while user is filling fields
+        navigator.geolocation.getCurrentPosition(() => {}, () => {}, { timeout: 2000 });
+      }
+    }
+  }, [activeTab]);
+
   const handleAuthError = (err: any) => {
     const code = err.code || err.message || '';
     if (code.includes('auth/invalid-credential') || code.includes('auth/wrong-password') || code.includes('auth/user-not-found')) {

@@ -1,7 +1,4 @@
 
-
-
-
 import React from 'react';
 
 export enum UserRole {
@@ -35,6 +32,22 @@ export interface User {
   licenseNo?: string;
   licenseExpiry?: string;
   fcmTokens?: string[]; // Added for Push Notifications
+}
+
+export interface AuditLogEntry {
+  id: string;
+  type: string;
+  title: string;
+  timestamp: string;
+  userId: string;
+  userName: string;
+  userRole: string;
+  ip: string;
+  device: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH';
+  eventId: string;
+  icon: string;
+  iconBg: string;
 }
 
 export interface ProviderRequest {

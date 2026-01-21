@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -52,6 +53,11 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create: if true; // Publicly accessible for new registration
       allow update, delete: if isAdmin();
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin(); // Usually written via cloud functions, but allow admin manually if needed
     }
 
     // --- BROADCASTS ---

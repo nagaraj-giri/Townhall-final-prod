@@ -1,3 +1,4 @@
+
 import { 
   collection, 
   doc, 
@@ -11,7 +12,8 @@ import {
   onSnapshot, 
   orderBy,
   writeBatch,
-  increment
+  increment,
+  limit
 } from "firebase/firestore";
 import type { Unsubscribe } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -24,7 +26,8 @@ import {
   AppNotification, 
   ProviderRequest, 
   ServiceCategory, 
-  UserRole 
+  UserRole,
+  AuditLogEntry
 } from "../../types";
 
 const COLLECTIONS = {
@@ -37,7 +40,8 @@ const COLLECTIONS = {
   SETTINGS: 'settings',
   REVIEWS: 'reviews',
   PROVIDER_REQUESTS: 'provider_requests',
-  BROADCASTS: 'broadcasts'
+  BROADCASTS: 'broadcasts',
+  AUDIT: 'audit_logs'
 };
 
 export const dataService = {
@@ -401,6 +405,28 @@ export const dataService = {
 
   updateProviderRequestStatus: async (id: string, status: string) => {
     try { await updateDoc(doc(db, COLLECTIONS.PROVIDER_REQUESTS, id), { status }); } catch (e) {}
+  },
+
+  // AUDIT LOGS
+  listenToAuditLogs: (callback: (logs: AuditLogEntry[]) => void, logLimit: number = 20, startDate?: string): Unsubscribe => {
+    let q;
+    if (startDate) {
+      q = query(
+        collection(db, COLLECTIONS.AUDIT), 
+        where('timestamp', '>=', startDate),
+        orderBy('timestamp', 'desc'),
+        limit(logLimit)
+      );
+    } else {
+      q = query(
+        collection(db, COLLECTIONS.AUDIT), 
+        orderBy('timestamp', 'desc'),
+        limit(logLimit)
+      );
+    }
+    return onSnapshot(q, (snapshot) => {
+      callback(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as AuditLogEntry)));
+    });
   },
 
   uploadImage: async (file: File | Blob, path: string): Promise<string> => {
