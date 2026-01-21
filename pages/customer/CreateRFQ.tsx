@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
+// Fix: Standardize react-router-dom imports to resolve "no exported member" errors
 import { useNavigate, useLocation } from 'react-router-dom';
 import { User, RFQ } from '../../types';
 import { dataService } from '../services/dataService';
@@ -143,6 +145,28 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
                   <p className="text-[10px] text-gray-500 font-medium">Documents: {aiSuggestion.requiredDocs.join(', ')}</p>
                 </div>
               </div>
+
+              {/* Fix: Explicitly display Google Maps grounding links as per Gemini SDK requirements */}
+              {aiSuggestion.mapsLinks && aiSuggestion.mapsLinks.length > 0 && (
+                <div className="bg-white/60 rounded-2xl p-4 space-y-2 border border-primary/5">
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">Location Context:</p>
+                  <div className="flex flex-col gap-2">
+                    {aiSuggestion.mapsLinks.map((link: any, idx: number) => (
+                      <a 
+                        key={idx} 
+                        href={link.uri} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-[11px] text-primary hover:underline font-bold flex items-center gap-1.5"
+                      >
+                        <span className="material-symbols-outlined text-sm">map</span>
+                        {link.title || "View on Google Maps"}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <button 
                 onClick={applyAISuggestion}
                 className="w-full py-3 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95"

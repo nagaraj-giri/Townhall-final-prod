@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { dataService } from '../services/dataService';
-import { authService } from '../authService';
-import { User, Quote, Review } from '../../types';
 import { useApp } from '../../App';
+import { authService } from '../authService';
+import { dataService } from '../services/dataService';
+import { Quote, Review, ServiceCategory, User } from '../../types';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 
 const ProviderDetails: React.FC = () => {
   const navigate = useNavigate();
@@ -18,6 +18,8 @@ const ProviderDetails: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [providerQuotes, setProviderQuotes] = useState<Quote[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [availableCategories, setAvailableCategories] = useState<ServiceCategory[]>([]);
+  const [newTag, setNewTag] = useState('');
   
   const [editForm, setEditForm] = useState({
     name: '',
@@ -32,7 +34,11 @@ const ProviderDetails: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       if (!id) return;
-      const u = await dataService.getUserById(id);
+      const [u, cats] = await Promise.all([
+        dataService.getUserById(id),
+        dataService.getCategories()
+      ]);
+      setAvailableCategories(cats);
       if (u) {
         setUser(u as User);
         setEditForm({
@@ -170,6 +176,24 @@ const ProviderDetails: React.FC = () => {
     }
   };
 
+  const handleServiceChange = (serviceName: string) => {
+    setEditForm(prev => ({
+      ...prev,
+      services: [serviceName]
+    }));
+  };
+
+  const addTag = () => {
+    if (newTag.trim() && !editForm.categories.includes(newTag.trim())) {
+      setEditForm(prev => ({ ...prev, categories: [...prev.categories, newTag.trim()] }));
+      setNewTag('');
+    }
+  };
+
+  const removeTag = (tag: string) => {
+    setEditForm(prev => ({ ...prev, categories: prev.categories.filter(t => t !== tag) }));
+  };
+
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen bg-transparent">
       <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
@@ -221,7 +245,7 @@ const ProviderDetails: React.FC = () => {
 
         <div className="grid grid-cols-4 gap-4 px-2">
           {[
-            { label: 'Edit', icon: isEditing ? 'check' : 'edit_square', onClick: isEditing ? handleSave : () => setIsEditing(true), active: isEditing },
+            { label: isEditing ? 'Save' : 'Edit', icon: isEditing ? 'check' : 'edit_square', onClick: isEditing ? handleSave : () => setIsEditing(true), active: isEditing },
             { label: user.isBlocked ? 'Restore' : 'Suspend', icon: 'block', onClick: handleToggleSuspend, active: user.isBlocked },
             { label: 'Store', icon: 'storefront', onClick: () => navigate(`/storefront/${user.id}`) },
             { label: 'Reset', icon: isEditing ? 'close' : 'history', onClick: isEditing ? () => setIsEditing(false) : handleSendReset, loading: isSendingReset },
@@ -312,15 +336,56 @@ const ProviderDetails: React.FC = () => {
               <div className="p-5 space-y-4">
                 <div className="space-y-1">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Services</p>
-                  <p className="text-[14px] font-bold text-text-dark">{editForm.services.length > 0 ? editForm.services.join(', ') : 'No services listed'}</p>
+                  {isEditing ? (
+                    <div className="relative mt-2">
+                      <select
+                        value={editForm.services[0] || ''}
+                        onChange={(e) => handleServiceChange(e.target.value)}
+                        className="w-full px-5 py-4 bg-gray-50 border-none rounded-2xl text-[14px] font-bold text-text-dark focus:ring-1 focus:ring-primary shadow-inner appearance-none outline-none"
+                      >
+                        <option value="" disabled>Select Core Service</option>
+                        {availableCategories.map(cat => (
+                          <option key={cat.id} value={cat.name}>{cat.name}</option>
+                        ))}
+                      </select>
+                      <span className="absolute right-5 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 pointer-events-none">expand_more</span>
+                    </div>
+                  ) : (
+                    <p className="text-[14px] font-bold text-text-dark">{editForm.services[0] || 'No primary service'}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Expertise Tags</p>
-                  <div className="flex flex-wrap gap-2">
-                    {editForm.categories.length > 0 ? editForm.categories.map(cat => (
-                      <span key={cat} className="bg-gray-50 border border-gray-100 text-[10px] font-bold text-text-dark px-3 py-1.5 rounded-lg">{cat}</span>
-                    )) : <p className="text-[11px] text-gray-300 font-bold uppercase">No tags defined</p>}
-                  </div>
+                  {isEditing ? (
+                    <div className="space-y-3 pt-1">
+                      <div className="flex flex-wrap gap-2">
+                        {editForm.categories.map(tag => (
+                          <span key={tag} className="bg-primary/10 text-primary text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 border border-primary/5">
+                            {tag}
+                            <button onClick={() => removeTag(tag)} className="material-symbols-outlined text-[14px] font-black">close</button>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          className="flex-1 bg-gray-50 border-none rounded-lg px-3 py-2 text-xs font-medium focus:ring-1 focus:ring-primary outline-none shadow-inner"
+                          placeholder="Add new expertise..."
+                          value={newTag}
+                          onChange={e => setNewTag(e.target.value)}
+                          onKeyPress={e => e.key === 'Enter' && addTag()}
+                        />
+                        <button onClick={addTag} className="w-9 h-9 bg-primary text-white rounded-lg flex items-center justify-center shadow-sm active:scale-95">
+                          <span className="material-symbols-outlined text-lg">add</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {editForm.categories.length > 0 ? editForm.categories.map(cat => (
+                        <span key={cat} className="bg-gray-50 border border-gray-100 text-[10px] font-bold text-text-dark px-3 py-1.5 rounded-lg">{cat}</span>
+                      )) : <p className="text-[11px] text-gray-300 font-bold uppercase">No tags defined</p>}
+                    </div>
+                  )}
                 </div>
               </div>
 

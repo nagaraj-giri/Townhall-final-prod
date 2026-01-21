@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 
 /**
@@ -5,6 +6,7 @@ import { GoogleGenAI } from "@google/genai";
  * Uses Gemini to structure user requests and validate Dubai locations via Google Maps grounding.
  */
 export const getAIConciergeSuggestions = async (query: string, locationHint?: string) => {
+  // Always initialize right before use to ensure the most recent API key is used
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   try {
@@ -30,6 +32,7 @@ export const getAIConciergeSuggestions = async (query: string, locationHint?: st
       }
     });
 
+    // Fix: Access .text property directly as per guidelines (do not use .text())
     const text = response.text || "";
     
     const titleMatch = text.match(/TITLE:\s*(.*)/i);
@@ -37,11 +40,26 @@ export const getAIConciergeSuggestions = async (query: string, locationHint?: st
     const descMatch = text.match(/DESCRIPTION:\s*([\s\S]*?)(?=DOCS:|$)/i);
     const docsMatch = text.match(/DOCS:\s*(.*)/i);
 
+    // Fix: Extract Google Maps grounding links as mandated for all Maps tool queries
+    const mapsLinks: { uri: string; title?: string }[] = [];
+    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (groundingChunks) {
+      groundingChunks.forEach((chunk: any) => {
+        if (chunk.maps && chunk.maps.uri) {
+          mapsLinks.push({
+            uri: chunk.maps.uri,
+            title: chunk.maps.title
+          });
+        }
+      });
+    }
+
     return {
       suggestedTitle: titleMatch ? titleMatch[1].trim() : query,
       suggestedCategory: catMatch ? catMatch[1].trim() : "PRO Services",
       suggestedDescription: descMatch ? descMatch[1].trim() : query,
-      requiredDocs: docsMatch ? docsMatch[1].split(',').map(s => s.trim()) : []
+      requiredDocs: docsMatch ? docsMatch[1].split(',').map(s => s.trim()) : [],
+      mapsLinks: mapsLinks
     };
   } catch (error) {
     console.error("AI Concierge Error:", error);

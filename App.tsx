@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect, createContext, useContext, useMemo } from 'react';
+// Fix: Standardize named imports for HashRouter, Routes, Route, Navigate, useNavigate to resolve reported missing member errors.
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { APIProvider } from '@vis.gl/react-google-maps';
 import Login from './pages/Login';
@@ -97,6 +99,7 @@ const NotificationsOverlay: React.FC<{
   onClose: () => void;
   notifications: AppNotification[];
 }> = ({ user, isOpen, onClose, notifications }) => {
+  // useNavigate is used inside HashRouter context in App.tsx
   const navigate = useNavigate();
   const { showToast } = useApp();
 

@@ -1,5 +1,6 @@
 
 import React from 'react';
+// Fix: Ensure Navigate is correctly imported from react-router-dom to fix missing member error.
 import { Navigate } from 'react-router-dom';
 import { User, UserRole } from '../types';
 import CustomerChat from './Customer/CustomerChat';
