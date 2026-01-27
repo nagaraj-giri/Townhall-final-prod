@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { User, RFQ } from '../../types';
 import { dataService } from '../services/dataService';
-import { getAIConciergeSuggestions } from '../services/geminiService';
 import { useApp } from '../../App';
 import { PlacesField } from '../../Functions/placesfield';
 
@@ -22,9 +21,7 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
   const [coords, setCoords] = useState({ lat: 25.185, lng: 55.275 });
   const [service, setService] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [availableServices, setAvailableServices] = useState<string[]>([]);
-  const [requiredDocs, setRequiredDocs] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -37,8 +34,6 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
 
       if (initialQuery) {
         setTitle(initialQuery);
-        // Automatically trigger AI if they came from the search bar
-        handleAIEnhance(initialQuery);
       } else if (preSelected && names.includes(preSelected)) {
         setService(preSelected);
       } else if (names.length > 0) {
@@ -47,32 +42,6 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
     };
     fetchData();
   }, [location.state]);
-
-  const handleAIEnhance = async (queryToUse?: string) => {
-    const text = queryToUse || title;
-    if (!text || text.length < 5) {
-      showToast("Please enter a basic requirement first", "info");
-      return;
-    }
-
-    setIsAIProcessing(true);
-    try {
-      const suggestions = await getAIConciergeSuggestions(text, locationName);
-      if (suggestions) {
-        setTitle(suggestions.suggestedTitle);
-        setDescription(suggestions.suggestedDescription);
-        setRequiredDocs(suggestions.requiredDocs);
-        if (availableServices.includes(suggestions.suggestedCategory)) {
-          setService(suggestions.suggestedCategory);
-        }
-        showToast("AI Assistant optimized your request", "success");
-      }
-    } catch (e) {
-      showToast("AI Assistant is busy, please try manually", "error");
-    } finally {
-      setIsAIProcessing(false);
-    }
-  };
 
   const handleCreate = async () => {
     if (!user.phone || !user.nationality) {
@@ -135,13 +104,6 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Requirement Title</label>
-                <button 
-                  onClick={() => handleAIEnhance()}
-                  disabled={isAIProcessing || title.length < 5}
-                  className="flex items-center gap-1.5 text-primary text-[10px] font-black uppercase tracking-widest disabled:opacity-30"
-                >
-                  {isAIProcessing ? 'Analyzing...' : <><span className="material-symbols-outlined text-[14px]">auto_fix_high</span> AI Assistant</>}
-                </button>
               </div>
               <input 
                 type="text" 
@@ -189,20 +151,6 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
                 className="w-full px-6 py-5 bg-white border border-gray-100 rounded-[2.2rem] text-[14px] font-medium text-text-dark focus:ring-1 focus:ring-primary shadow-sm min-h-[160px] resize-none placeholder-gray-300 leading-relaxed" 
               />
             </div>
-
-            {requiredDocs.length > 0 && (
-              <div className="bg-primary/5 p-6 rounded-[2rem] border border-primary/10 space-y-3 animate-in fade-in zoom-in-95">
-                 <p className="text-[9px] font-black text-primary uppercase tracking-[0.2em] ml-1">AI Document Checklist</p>
-                 <div className="flex flex-wrap gap-2">
-                   {requiredDocs.map((doc, idx) => (
-                     <span key={idx} className="bg-white px-3 py-1.5 rounded-xl text-[10px] font-bold text-text-dark border border-gray-100 shadow-sm flex items-center gap-2">
-                       <span className="material-symbols-outlined text-accent-green text-[14px] font-black">check_circle</span>
-                       {doc}
-                     </span>
-                   ))}
-                 </div>
-              </div>
-            )}
           </div>
         </main>
 
@@ -214,7 +162,7 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
           >
             {isSubmitting ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : (
               <>
-                Broadcast Live
+                BROADCAST LIVE
                 <span className="material-symbols-outlined text-lg font-black">sensors</span>
               </>
             )}
