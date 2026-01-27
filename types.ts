@@ -17,6 +17,8 @@ export interface User {
   isBlocked?: boolean;
   createdAt?: string;
   lastLoginAt?: string;
+  lastIP?: string;
+  lastDevice?: string;
   location?: {
     lat: number;
     lng: number;
@@ -31,7 +33,8 @@ export interface User {
   gallery?: string[];
   licenseNo?: string;
   licenseExpiry?: string;
-  fcmTokens?: string[]; // Added for Push Notifications
+  fcmTokens?: string[];
+  profileViews?: number;
 }
 
 export interface AuditLogEntry {
@@ -107,7 +110,7 @@ export interface Quote {
 
 export interface Review {
   id: string;
-  rfqId: string; // Link to specific transaction
+  rfqId: string;
   providerId: string;
   customerId: string;
   rating: number;
@@ -145,22 +148,15 @@ export interface AppNotification {
   actionUrl?: string;
 }
 
-// Augment global scope for Window and JSX namespace.
 declare global {
   interface AIStudio {
     hasSelectedApiKey: () => Promise<boolean>;
     openSelectKey: () => Promise<void>;
   }
-
-  // Fix: Explicitly declare global 'aistudio' as var to match standard browser global behavior.
-  // This correctly handles both 'aistudio' and 'window.aistudio' typing in a web context.
   var aistudio: AIStudio;
-
   interface Window {
     google: any;
-    // Removed redundant aistudio declaration to resolve modifier conflict errors with the global var above.
   }
-  
   namespace JSX {
     interface IntrinsicElements {
       'gmpx-place-picker': any;

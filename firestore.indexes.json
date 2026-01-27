@@ -1,6 +1,19 @@
-
 {
   "indexes": [
+    {
+      "collectionId": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "role",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "services",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
     {
       "collectionId": "notifications",
       "queryScope": "COLLECTION",
@@ -9,30 +22,6 @@
           "fieldPath": "userId",
           "order": "ASCENDING"
         },
-        {
-          "fieldPath": "timestamp",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionId": "notifications",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "broadcastId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "isRead",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionId": "broadcasts",
-      "queryScope": "COLLECTION",
-      "fields": [
         {
           "fieldPath": "timestamp",
           "order": "DESCENDING"
@@ -50,62 +39,6 @@
         {
           "fieldPath": "lastTimestamp",
           "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionId": "quotes",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "rfqId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionId": "reviews",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "providerId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionId": "reviews",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "providerId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionId": "history",
-      "queryScope": "COLLECTION_GROUP",
-      "fields": [
-        {
-          "fieldPath": "recipientId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "status",
-          "order": "ASCENDING"
         }
       ]
     }

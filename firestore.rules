@@ -40,6 +40,16 @@ service cloud.firestore {
       allow create: if isSignedIn(); 
       allow update: if isSignedIn(); 
       allow delete: if isAdmin() || (isSignedIn() && resource.data.customerId == request.auth.uid);
+
+      // --- MATCHES SUB-COLLECTION ---
+      match /matches/{matchId} {
+        allow read: if isSignedIn() && (
+          isAdmin() || 
+          request.auth.uid == get(/databases/$(database)/documents/rfqs/$(rfqId)).data.customerId ||
+          request.auth.uid == matchId
+        );
+        allow write: if isAdmin(); // Matches are managed by server-side Cloud Functions
+      }
     }
 
     match /quotes/{quoteId} {
@@ -51,21 +61,18 @@ service cloud.firestore {
     
     match /provider_requests/{requestId} {
       allow read: if isAdmin();
-      allow create: if true; // Publicly accessible for new registration
+      allow create: if true;
       allow update, delete: if isAdmin();
     }
 
     match /audit_logs/{logId} {
       allow read: if isAdmin();
-      allow write: if isAdmin(); // Usually written via cloud functions, but allow admin manually if needed
+      allow write: if isAdmin(); 
     }
 
-    // --- BROADCASTS ---
     match /broadcasts/{broadcastId} {
       allow read, write: if isAdmin();
     }
-
-    // --- MESSAGING FLOW ---
 
     match /chats/{roomId} {
       allow read: if isSignedIn() && (request.auth.uid in resource.data.participants || isAdmin());
@@ -94,17 +101,7 @@ service cloud.firestore {
       }
     }
 
-    // Collection Group Queries
-    match /{path=**}/history/{messageId} {
-      allow read: if isSignedIn() && (
-        request.auth.uid == resource.data.recipientId || 
-        request.auth.uid == resource.data.senderId || 
-        isAdmin()
-      );
-    }
-
     match /notifications/{notifId} {
-      // Allow users to see their own notifications, Admins can see all for broadcast stats
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isSignedIn();
       allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
@@ -130,6 +127,12 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isCustomer();
       allow update, delete: if isAdmin();
+    }
+
+    // Rules for "Trigger Email" extension
+    match /emails/{emailId} {
+      allow create: if isSignedIn();
+      allow read, update, delete: if isAdmin();
     }
   }
 }

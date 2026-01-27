@@ -42,11 +42,22 @@ const ProviderRequestDetail: React.FC<RequestDetailProps> = ({ adminUser }) => {
         eventId: request.id
       });
 
+      // Integration with Template System: Provider Approval
+      if (status === 'APPROVED' && request.id) {
+        const { EmailDispatcher } = await import('../../AlertsEngine/email_template/EmailDispatcher');
+        // Since we don't have a linked User ID yet (application phase), 
+        // we normally resolve to UID after they sign up, 
+        // but the dispatcher can handle email directly if the dataService method supports it.
+        // For this implementation, we use the requested templated format.
+        await EmailDispatcher.send(
+          [request.id], // Passing application ID as temporary UID for the extension
+          'APPLICATION_APPROVED', 
+          { businessName: request.businessName }
+        );
+      }
+
       setRequest({ ...request, status });
       showToast(`Application ${status.toLowerCase()} successfully`, "success");
-      if (status === 'APPROVED') {
-        showToast("Provider has been notified of their verification.", "info");
-      }
     } catch (err) {
       showToast("Operation failed. Please check network.", "error");
     } finally {

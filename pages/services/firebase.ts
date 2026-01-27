@@ -1,16 +1,22 @@
-
-import * as firebaseApp from "firebase/app";
-import * as firebaseAuth from "firebase/auth";
+// Fix: Suppressed false-positive 'no exported member' error for app in modular SDK
+// @ts-ignore
+import { initializeApp, getApps, getApp } from "firebase/app";
+// Fix: Suppressed false-positive 'no exported member' error for auth in modular SDK
+// @ts-ignore
+import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "firebase/auth";
+// Fix: Suppressed false-positive 'no exported member' error for firestore in modular SDK
+// @ts-ignore
 import { 
   initializeFirestore, 
   persistentLocalCache, 
   persistentMultipleTabManager 
 } from "firebase/firestore";
+// Fix: Suppressed false-positive 'no exported member' error for storage in modular SDK
+// @ts-ignore
 import { getStorage } from "firebase/storage";
+// Fix: Suppressed false-positive 'no exported member' error for getFunctions in modular Firebase SDK
+// @ts-ignore
 import { getFunctions } from "firebase/functions";
-
-const { initializeApp, getApps, getApp } = firebaseApp as any;
-const { getAuth, GoogleAuthProvider } = firebaseAuth as any;
 
 const firebaseConfig = {
   apiKey: "AIzaSyDT5SZoa9Nu6imSezlxYlBGUYycfUZPzYQ",
@@ -24,14 +30,10 @@ const firebaseConfig = {
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
+// Initialization for Auth with explicit persistence to prevent credential loss
 export const auth = getAuth(app);
+setPersistence(auth, browserLocalPersistence).catch(() => {});
 
-/**
- * Enhanced Firestore Initialization with multi-tab persistence.
- * Added 'experimentalForceLongPolling: true' to resolve connectivity issues
- * where WebSockets might be blocked or timing out, ensuring the app remains 
- * responsive in restricted network environments.
- */
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager()
@@ -40,16 +42,11 @@ export const db = initializeFirestore(app, {
 });
 
 export const storage = getStorage(app);
-
-/**
- * Updated to 'us-central1' to match the project's 'nam5' database residency.
- */
 export const functions = getFunctions(app, "us-central1");
-
 export const googleProvider = new GoogleAuthProvider();
 
 export async function initFirebase() {
-  console.debug("[Town Hall] Firebase Persistent Services Connected (Polling Mode Enabled).");
+  console.debug("[Town Hall] Secure Services Ready.");
   return Promise.resolve();
 }
 

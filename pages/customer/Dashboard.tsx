@@ -9,7 +9,7 @@ interface DashboardProps { user: User; }
 
 const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   const navigate = useNavigate();
-  const { unreadCount, toggleNotifications, chatUnreadCount } = useApp();
+  const { unreadCount, toggleNotifications, chatUnreadCount, showToast } = useApp();
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [recentRfqs, setRecentRfqs] = useState<RFQ[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -22,10 +22,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     });
 
     const unsubRfqs = dataService.listenToRFQs((all) => {
-      // Logic: Filter by customerId and limit to the last 2 queries
       const myRfqs = all
         .filter(r => r.customerId === user.id)
-        .slice(0, 2);
+        .slice(0, 3);
       setRecentRfqs(myRfqs);
       setIsLoading(false);
     });
@@ -65,19 +64,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
     }
   };
 
-  const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case 'OPEN': return 'bg-orange-50 text-orange-500';
-      case 'ACTIVE': return 'bg-blue-50 text-blue-500';
-      case 'ACCEPTED': return 'bg-primary/5 text-primary';
-      case 'COMPLETED': return 'bg-green-50 text-green-600';
-      default: return 'bg-gray-50 text-gray-400';
-    }
-  };
-
   if (isLoading) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+    <div className="flex items-center justify-center min-h-screen bg-[#FAF9F6]">
+      <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
     </div>
   );
 
@@ -88,11 +77,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         <div className="flex items-center gap-3">
           <div className="relative">
             <img src={user.avatar} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm" alt="" />
-            <div className="absolute bottom-0 right-0 w-3 h-3 bg-accent-green rounded-full border-2 border-white"></div>
+            <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-accent-green rounded-full border-2 border-white"></div>
           </div>
           <div>
-            <p className="text-[10px] text-text-light font-normal uppercase tracking-widest leading-none mb-0.5 opacity-60">SALAM,</p>
-            <h1 className="text-[22px] font-black text-text-dark leading-none tracking-tight">{user.name}</h1>
+            <p className="text-[10px] text-text-light font-normal uppercase tracking-widest leading-none mb-1 opacity-60">SALAM,</p>
+            <h1 className="text-[20px] font-black text-text-dark leading-none tracking-tight">{user.name.split(' ')[0]}</h1>
           </div>
         </div>
         <button onClick={() => toggleNotifications(true)} className="relative w-11 h-11 rounded-[1.2rem] bg-white flex items-center justify-center shadow-card border border-gray-100 active:scale-95 transition-transform">
@@ -102,12 +91,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
       </header>
 
       <main className="flex-1 overflow-y-auto no-scrollbar pb-10">
-        {/* Popular Services Section - Horizontal 2x2 Grid */}
-        <div className="px-6 mb-8">
+        {/* Quick Services Section */}
+        <div className="px-6 mb-8 mt-4">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-[12px] font-black text-text-dark uppercase tracking-[0.15em] opacity-80">Popular Services</h3>
+            <h3 className="text-[12px] font-black text-text-dark uppercase tracking-[0.15em] opacity-80">Market Categories</h3>
             <div className="flex gap-2">
-              <button onClick = {() => handleScroll('left')} className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center text-text-dark opacity-30 active:opacity-100 transition-opacity">
+              <button onClick={() => handleScroll('left')} className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center text-text-dark opacity-30 active:opacity-100 transition-opacity">
                 <span className="material-symbols-outlined text-xl font-normal">chevron_left</span>
               </button>
               <button onClick={() => handleScroll('right')} className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center text-text-dark opacity-80 active:opacity-100 transition-opacity">
@@ -124,15 +113,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
               <div 
                 key={cat.id} 
                 onClick={() => navigate('/create-rfq', { state: { selectedCategory: cat.name } })} 
-                className="bg-white p-5 rounded-[2.2rem] border border-white shadow-card active:scale-[0.97] transition-all cursor-pointer flex flex-col items-center justify-center gap-3 relative overflow-hidden snap-start text-center"
+                className="bg-white p-5 rounded-[2.2rem] border border-white shadow-card active:scale-[0.97] transition-all cursor-pointer flex flex-col items-center justify-center gap-3 relative overflow-hidden snap-start text-center group"
               >
                 <div 
-                  className="w-12 h-12 rounded-[1.2rem] flex items-center justify-center relative z-10 shadow-sm" 
+                  className="w-12 h-12 rounded-[1.2rem] flex items-center justify-center relative z-10 shadow-sm transition-transform group-hover:scale-110" 
                   style={{ backgroundColor: `${cat.color}15`, color: cat.color }}
                 >
                   <span className="material-symbols-outlined text-[28px] font-normal">{cat.icon}</span>
                 </div>
-                <h4 className="font-normal text-text-dark text-[10px] uppercase tracking-widest leading-tight relative z-10 px-1">{cat.name}</h4>
+                <h4 className="font-bold text-text-dark text-[10px] uppercase tracking-widest leading-tight relative z-10 px-1">{cat.name}</h4>
               </div>
             ))}
           </div>
@@ -141,8 +130,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         {/* Recent Requests Section */}
         <div className="px-6">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-[18px] font-black text-text-dark tracking-tight">Recent Requests</h3>
-            <button onClick={() => navigate('/queries')} className="text-primary text-[12px] font-normal uppercase tracking-widest">View All</button>
+            <h3 className="text-[18px] font-black text-text-dark tracking-tight">Active Requests</h3>
+            <button onClick={() => navigate('/queries')} className="text-primary text-[12px] font-bold uppercase tracking-widest">History</button>
           </div>
 
           <div className="space-y-4">
@@ -150,30 +139,28 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
               <div 
                 key={rfq.id} 
                 onClick={() => navigate(`/rfq/${rfq.id}`)}
-                className={`bg-white rounded-[2.5rem] p-6 shadow-card border-white relative overflow-hidden active:scale-[0.98] transition-all cursor-pointer group border-l-[6px] ${getStatusBorderColor(rfq.status)}`}
+                className={`bg-white rounded-[2.5rem] p-6 shadow-card border-white relative overflow-hidden active:scale-[0.98] transition-all cursor-pointer group border-l-[6px] animate-in slide-in-from-bottom duration-500 ${getStatusBorderColor(rfq.status)}`}
               >
                 <div className="flex justify-between items-start mb-3">
                    <div className="flex items-center gap-2">
-                     <div className="inline-flex px-3 py-1 bg-primary/5 text-primary rounded-xl text-[10px] font-normal uppercase tracking-tight">
+                     <div className="inline-flex px-3 py-1 bg-primary/5 text-primary rounded-xl text-[10px] font-bold uppercase tracking-tight">
                        {rfq.category}
                      </div>
-                     <div className={`px-2 py-1 text-[8px] font-black uppercase rounded ${getStatusBadgeClass(rfq.status)}`}>
-                       {rfq.status === 'OPEN' ? 'OPENED' : rfq.status}
-                     </div>
                    </div>
-                   <div className="px-3 py-1 bg-[#FFF9E6] text-[#A18100] rounded-xl text-[10px] font-normal uppercase tracking-tight">
-                     Quotes: {rfq.quotesCount}
+                   <div className="px-3 py-1 bg-[#FFF9E6] text-[#A18100] rounded-xl text-[10px] font-black uppercase tracking-tight">
+                     {rfq.quotesCount} Bids
                    </div>
                 </div>
                 <h2 className="text-[15px] font-black text-text-dark tracking-tight mb-1">{rfq.title}</h2>
-                <p className="text-[11px] text-text-light font-normal uppercase tracking-tight">
-                  Request ID: {rfq.idDisplay} • {getRelativeTime(rfq.createdAt)}
+                <p className="text-[11px] text-text-light font-medium uppercase tracking-tight flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[14px]">schedule</span>
+                  {getRelativeTime(rfq.createdAt)}
                 </p>
               </div>
             )) : (
-              <div className="py-12 text-center bg-white/50 rounded-[2.5rem] border border-dashed border-gray-200">
-                <span className="material-symbols-outlined text-4xl text-gray-200 mb-2 font-normal">assignment_late</span>
-                <p className="text-[10px] font-normal text-gray-300 uppercase tracking-widest">No active requests</p>
+              <div className="py-12 text-center bg-white/50 rounded-[2.5rem] border-2 border-dashed border-gray-200">
+                <span className="material-symbols-outlined text-4xl text-gray-200 mb-2 font-light">auto_stories</span>
+                <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">No active requests found</p>
               </div>
             )}
           </div>
@@ -186,20 +173,20 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-[1rem]">
              <span className="material-symbols-outlined text-[26px] font-normal">home</span>
           </div>
-          <span className="text-[9px] font-normal uppercase tracking-widest">HOME</span>
+          <span className="text-[9px] font-bold uppercase tracking-widest">HOME</span>
         </button>
         <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-60">
           <span className="material-symbols-outlined text-[26px] font-normal">format_list_bulleted</span>
-          <span className="text-[9px] font-normal uppercase tracking-widest">QUERIES</span>
+          <span className="text-[9px] font-bold uppercase tracking-widest">QUERIES</span>
         </button>
         <button onClick={() => navigate('/messages')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light relative opacity-60">
           <span className="material-symbols-outlined text-[26px] font-normal">chat_bubble</span>
           {chatUnreadCount > 0 && <div className="absolute top-0 right-3 w-4 h-4 bg-accent-pink rounded-full border-2 border-white text-[8px] font-normal text-white flex items-center justify-center">{chatUnreadCount > 9 ? '9+' : chatUnreadCount}</div>}
-          <span className="text-[9px] font-normal uppercase tracking-widest">CHAT</span>
+          <span className="text-[9px] font-bold uppercase tracking-widest">CHAT</span>
         </button>
         <button onClick={() => navigate('/profile')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-60">
           <span className="material-symbols-outlined text-[26px] font-normal">person</span>
-          <span className="text-[9px] font-normal uppercase tracking-widest">PROFILE</span>
+          <span className="text-[9px] font-bold uppercase tracking-widest">PROFILE</span>
         </button>
       </nav>
     </div>

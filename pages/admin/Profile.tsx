@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, UserRole, ServiceCategory } from '../../types';
@@ -15,37 +14,50 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
   const navigate = useNavigate();
   const { showToast, unreadCount, toggleNotifications } = useApp();
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const bannerInputRef = useRef<HTMLInputElement>(null);
   const adminAvatarInputRef = useRef<HTMLInputElement>(null);
   
   const [isSaving, setIsSaving] = useState(false);
+  const [isTestingEmail, setIsTestingEmail] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [emailLastError, setEmailLastError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'profile' | 'system'>('profile'); 
   
   const [isSiteOpen, setIsSiteOpen] = useState(false);
-  const [isServiceOpen, setIsServiceOpen] = useState(true);
+  const [isServiceOpen, setIsServiceOpen] = useState(false);
+  const [isEmailOpen, setIsEmailOpen] = useState(true);
+
+  // URI Builder State - Updated with latest production credentials
+  const [builderProvider, setBuilderProvider] = useState<'GMAIL' | 'SENDGRID' | 'CUSTOM'>('GMAIL');
+  const [builderUser, setBuilderUser] = useState('fulltechsln@gmail.com');
+  const [builderPass, setBuilderPass] = useState('oocn omvs lzal cirt');
+  const [fromName, setFromName] = useState('Town Hall');
 
   const [settings, setSettings] = useState<any>({ 
     siteName: 'Town Hall UAE', 
     logo: '', 
     maintenanceMode: false, 
-    newRegistrations: true 
+    newRegistrations: true,
+    smtpUri: 'smtps://fulltechsln%40gmail.com:oocnomvslzalcirt@smtp.gmail.com:465',
+    emailCollection: 'emails',
+    defaultFrom: 'Town Hall <fulltechsln@gmail.com>',
+    emailLastVerified: null
   });
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
-  const [banners, setBanners] = useState<any[]>([]);
   const [statsData, setStatsData] = useState({ customers: 0, providers: 0, rfqs: 0 });
 
   useEffect(() => {
     const fetchData = async () => {
-      const [sets, cats, usrs, rfqs, bans] = await Promise.all([
+      const [sets, cats, usrs, rfqs] = await Promise.all([
         dataService.getSettings(),
         dataService.getCategories(),
         dataService.getUsers(),
-        dataService.getRFQs(),
-        dataService.getBanners()
+        dataService.getRFQs()
       ]);
-      if (sets) setSettings(sets);
+      if (sets) {
+        setSettings({ ...settings, ...sets });
+        if (sets.emailLastVerified) setIsEmailVerified(true);
+      }
       if (cats) setCategories(cats);
-      if (bans) setBanners(bans.filter(b => b && b.id && b.imageUrl));
       setStatsData({
         customers: usrs.filter(u => u.role === UserRole.CUSTOMER).length,
         providers: usrs.filter(u => u.role === UserRole.PROVIDER).length,
@@ -55,29 +67,95 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
     fetchData();
   }, []);
 
+  const isUriValid = useMemo(() => {
+    return settings.smtpUri && settings.smtpUri.startsWith('smtps://') && settings.smtpUri.includes('@');
+  }, [settings.smtpUri]);
+
+  const applyUriBuilder = () => {
+    if (!builderUser || !builderPass) {
+      showToast("Enter credentials first", "error");
+      return;
+    }
+    
+    const cleanUser = builderUser.trim().replace('@', '%40');
+    const cleanPass = builderPass.trim().replace(/\s+/g, '');
+    
+    let uri = '';
+    if (builderProvider === 'GMAIL') {
+      uri = `smtps://${cleanUser}:${cleanPass}@smtp.gmail.com:465`;
+    } else if (builderProvider === 'SENDGRID') {
+      uri = `smtps://apikey:${cleanPass}@smtp.sendgrid.net:465`;
+    }
+    
+    const defaultFrom = `${fromName} <${builderUser.trim()}>`;
+    
+    setSettings({ ...settings, smtpUri: uri, defaultFrom: defaultFrom });
+    showToast("Production parameters updated", "success");
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text.trim());
+    showToast(`${label} Copied`, "success");
+  };
+
   const handleSaveAll = async () => {
     setIsSaving(true);
     try {
-      await Promise.all([
-        dataService.saveSettings(settings),
-        dataService.saveCategories(categories),
-        dataService.saveBanners(banners)
-      ]);
-      
+      await dataService.saveSettings(settings);
       await dataService.createAuditLog({
         admin: user,
-        title: "Platform Configuration Updated",
+        title: "SMTP Gateway Finalized",
         type: "SYSTEM_CONFIG",
         severity: "MEDIUM",
-        icon: "settings",
+        icon: "alternate_email",
         iconBg: "bg-primary"
       });
-
-      showToast("System configurations saved", 'success');
+      showToast("Global configurations saved", 'success');
     } catch (err: any) {
       showToast("Error saving settings", 'error');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleTestEmail = async () => {
+    setIsTestingEmail(true);
+    setEmailLastError(null);
+    showToast(`Initiating handshake for ${builderUser}...`, "info");
+    try {
+      await dataService.testEmailTrigger();
+      showToast("Handshake document created", "success");
+      
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        const delivery = await dataService.getLastEmailStatus();
+        if (delivery?.state === 'ERROR') {
+          setEmailLastError(delivery.error);
+          setIsEmailVerified(false);
+          clearInterval(poll);
+          setIsTestingEmail(false);
+        } else if (delivery?.state === 'SUCCESS') {
+          showToast("Live SMTP Verification Successful!", "success");
+          setIsEmailVerified(true);
+          const now = new Date().toISOString();
+          setSettings(prev => ({ ...prev, emailLastVerified: now }));
+          dataService.saveSettings({ ...settings, emailLastVerified: now });
+          clearInterval(poll);
+          setIsTestingEmail(false);
+        }
+        if (attempts > 12) {
+          clearInterval(poll);
+          setIsTestingEmail(false);
+          // Fix: Changed "warning" to "info" to match the defined ToastType: 'success' | 'error' | 'info'
+          showToast("Handshake timeout: Ensure Extension is active", "info");
+        }
+      }, 2500);
+
+    } catch (err: any) {
+      showToast(err.message || "Test dispatch failed", "error");
+      setIsTestingEmail(false);
     }
   };
 
@@ -88,17 +166,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
         showToast("Uploading logo...", "info");
         const url = await dataService.uploadImage(file, `system/logo_${Date.now()}`);
         setSettings({ ...settings, logo: url });
-        
-        await dataService.createAuditLog({
-          admin: user,
-          title: "Site Branding Logo Changed",
-          type: "UI_BRANDING",
-          severity: "LOW",
-          icon: "image",
-          iconBg: "bg-blue-500"
-        });
-
-        showToast("Logo uploaded", "success");
+        showToast("Logo updated", "success");
       } catch (err) {
         showToast("Upload failed", "error");
       }
@@ -109,12 +177,12 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        showToast("Updating profile picture...", "info");
+        showToast("Updating avatar...", "info");
         const url = await dataService.uploadImage(file, `avatars/admin_${Date.now()}`);
         const updatedUser = { ...user, avatar: url };
         await dataService.saveUser(updatedUser);
         if (onUpdateUser) onUpdateUser(updatedUser);
-        showToast("Profile picture updated", "success");
+        showToast("Avatar updated", "success");
       } catch (err) {
         showToast("Update failed", "error");
       }
@@ -148,154 +216,140 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                   onClick={() => adminAvatarInputRef.current?.click()}
                   className="w-32 h-32 rounded-[2.8rem] border-[6px] border-white shadow-soft overflow-hidden bg-gray-100 flex items-center justify-center cursor-pointer transition-transform active:scale-95"
                 >
-                  <img src={user.avatar} className="w-full h-full object-cover" alt="Admin Avatar" />
-                </div>
-                <div 
-                  onClick={() => adminAvatarInputRef.current?.click()}
-                  className="absolute bottom-1 right-1 bg-primary w-9 h-9 rounded-2xl border-4 border-white flex items-center justify-center shadow-lg text-white cursor-pointer active:scale-90"
-                >
-                  <span className="material-symbols-outlined text-sm font-black">photo_camera</span>
+                  <img src={user.avatar} className="w-full h-full object-cover" alt="Admin" />
+                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <span className="material-symbols-outlined text-white">photo_camera</span>
+                  </div>
                 </div>
                 <input type="file" ref={adminAvatarInputRef} className="hidden" accept="image/*" onChange={handleAdminAvatarUpload} />
               </div>
-              
-              <div className="mt-6 text-center">
-                <h2 className="text-[26px] font-[900] text-text-dark tracking-tighter uppercase leading-none">Admin</h2>
-                <div className="mt-3 inline-flex items-center gap-2 bg-primary/5 px-4 py-1.5 rounded-xl border border-primary/10">
-                  <span className="material-symbols-outlined text-primary text-sm font-black">verified_user</span>
-                  <span className="text-[10px] font-black text-primary uppercase tracking-widest">System Administrator</span>
-                </div>
+              <h2 className="mt-6 text-xl font-black text-text-dark uppercase tracking-tight">{user.name}</h2>
+              <p className="text-[10px] font-bold text-primary uppercase tracking-[0.2em] mt-1">Platform Administrator</p>
+            </div>
+
+            <div className="px-8 grid grid-cols-3 gap-4">
+              <div className="bg-white p-5 rounded-[2rem] shadow-soft border border-white text-center">
+                <p className="text-xl font-black text-text-dark">{statsData.customers}</p>
+                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Clients</p>
+              </div>
+              <div className="bg-white p-5 rounded-[2rem] shadow-soft border border-white text-center">
+                <p className="text-xl font-black text-text-dark">{statsData.providers}</p>
+                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Experts</p>
+              </div>
+              <div className="bg-white p-5 rounded-[2rem] shadow-soft border border-white text-center">
+                <p className="text-xl font-black text-text-dark">{statsData.rfqs}</p>
+                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Queries</p>
               </div>
             </div>
 
-            <div className="px-6 grid grid-cols-3 gap-3">
-              {[
-                { label: 'Total Users', value: statsData.customers + statsData.providers, color: 'text-primary' },
-                { label: 'Total RFQs', value: statsData.rfqs, color: 'text-accent-pink' },
-                { label: 'Providers', value: statsData.providers, color: 'text-accent-green' },
-              ].map((stat) => (
-                <div key={stat.label} className="bg-white/60 backdrop-blur-md rounded-[2.5rem] p-5 text-center shadow-card border border-white flex flex-col items-center justify-center min-h-[120px]">
-                  <p className="text-[9px] font-black text-gray-400 mb-2 uppercase tracking-[0.15em] leading-tight">{stat.label}</p>
-                  <p className={`text-[32px] font-[900] ${stat.color} leading-none tracking-tighter`}>{stat.value}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="px-8 space-y-4 pt-2">
-              <button 
-                onClick={() => navigate('/admin/audit-log')}
-                className="w-full py-5 bg-white border border-gray-100 text-text-dark rounded-[2rem] text-[12px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-soft active:scale-[0.98] transition-all"
-              >
-                <span className="material-symbols-outlined text-[20px] font-black text-primary">history_edu</span>
-                Audit Log
-              </button>
-              
-              <button 
-                onClick={onLogout} 
-                className="w-full py-5 bg-white border border-red-50 text-red-500 rounded-[2rem] text-[12px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-soft active:scale-[0.98] transition-all"
-              >
-                <span className="material-symbols-outlined text-[20px] font-black">logout</span>
-                Sign Out Session
-              </button>
+            <div className="px-8 space-y-3 pb-8">
+               <button onClick={() => navigate('/admin/audit-log')} className="w-full bg-white p-5 rounded-[1.8rem] shadow-soft border border-white flex items-center justify-between group active:scale-[0.98] transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-indigo-50 text-indigo-500 rounded-xl flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[22px]">history_edu</span>
+                    </div>
+                    <span className="text-[13px] font-bold text-text-dark">Security Audit Logs</span>
+                  </div>
+                  <span className="material-symbols-outlined text-gray-300 group-hover:text-primary transition-colors">chevron_right</span>
+               </button>
+               <button onClick={() => navigate('/admin/categories')} className="w-full bg-white p-5 rounded-[1.8rem] shadow-soft border border-white flex items-center justify-between group active:scale-[0.98] transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-emerald-50 text-emerald-500 rounded-xl flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[22px]">category</span>
+                    </div>
+                    <span className="text-[13px] font-bold text-text-dark">Service Categories</span>
+                  </div>
+                  <span className="material-symbols-outlined text-gray-300 group-hover:text-primary transition-colors">chevron_right</span>
+               </button>
+               <button onClick={onLogout} className="w-full bg-white p-5 rounded-[1.8rem] shadow-soft border border-white flex items-center justify-between group active:scale-[0.98] transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[22px]">logout</span>
+                    </div>
+                    <span className="text-[13px] font-bold text-red-500">Sign Out Console</span>
+                  </div>
+                  <span className="material-symbols-outlined text-gray-200">lock</span>
+               </button>
             </div>
           </div>
         ) : (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300 pb-20">
-            <div className="px-6 flex justify-between items-center mb-2">
-              <h2 className="text-xl font-black text-text-dark uppercase tracking-tight">System Config</h2>
-            </div>
-
-            <div className="px-6 space-y-4">
-              <div className="bg-white rounded-[2rem] shadow-card border border-white overflow-hidden">
-                <button 
-                  onClick={() => setIsSiteOpen(!isSiteOpen)}
-                  className="w-full px-8 py-6 flex items-center justify-between active:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-primary font-bold">language</span>
-                    <span className="text-[15px] font-bold text-text-dark uppercase tracking-tight">Site Settings</span>
+          <div className="px-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="space-y-6">
+              <section className="bg-white rounded-[2.5rem] p-8 shadow-card border border-white space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[15px] font-bold text-text-dark">Global Gateway</h3>
+                  <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${isEmailVerified ? 'bg-accent-green/10 text-accent-green' : 'bg-red-50 text-red-400'}`}>
+                    {isEmailVerified ? 'Live' : 'Handshake Pending'}
                   </div>
-                  <span className={`material-symbols-outlined transition-transform duration-300 ${isSiteOpen ? 'rotate-180' : ''}`}>expand_more</span>
-                </button>
-                
-                {isSiteOpen && (
-                  <div className="px-8 pb-8 space-y-6 animate-in slide-in-from-top-2">
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest ml-1">Platform Name</label>
-                      <input 
-                        className="w-full px-5 py-4 bg-gray-50 border-none rounded-2xl text-[14px] font-bold text-text-dark focus:ring-1 focus:ring-primary shadow-inner outline-none"
-                        value={settings.siteName}
-                        onChange={e => setSettings({...settings, siteName: e.target.value})}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest ml-1">Branding Logo</label>
-                      <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center border border-gray-100 overflow-hidden">
-                          {settings.logo ? <img src={settings.logo} className="w-full h-full object-contain" alt="Logo" /> : <span className="material-symbols-outlined text-gray-200">image</span>}
-                        </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">SMTP Provider</label>
+                    <div className="flex gap-2">
+                      {['GMAIL', 'SENDGRID'].map(p => (
                         <button 
-                          onClick={() => logoInputRef.current?.click()}
-                          className="px-5 py-3 bg-white border border-gray-100 rounded-xl text-[11px] font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all"
+                          key={p} 
+                          onClick={() => setBuilderProvider(p as any)}
+                          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${builderProvider === p ? 'bg-primary text-white border-primary shadow-lg' : 'bg-gray-50 text-gray-400 border-gray-100'}`}
                         >
-                          Upload New
+                          {p}
                         </button>
-                        <input type="file" ref={logoInputRef} className="hidden" accept="image/*" onChange={handleLogoUpload} />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between py-2">
-                       <div>
-                         <p className="text-[13px] font-bold text-text-dark">Maintenance Mode</p>
-                         <p className="text-[10px] text-gray-400 font-medium">Block access for non-admins</p>
-                       </div>
-                       <button 
-                        onClick={() => setSettings({...settings, maintenanceMode: !settings.maintenanceMode})}
-                        className={`w-12 h-6 rounded-full transition-all relative ${settings.maintenanceMode ? 'bg-red-500' : 'bg-gray-200'}`}
-                       >
-                         <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.maintenanceMode ? 'left-7' : 'left-1'}`}></div>
-                       </button>
+                      ))}
                     </div>
                   </div>
-                )}
-              </div>
 
-              <div className="bg-white rounded-[2rem] shadow-card border border-white overflow-hidden">
-                <button 
-                  onClick={() => setIsServiceOpen(!isServiceOpen)}
-                  className="w-full px-8 py-6 flex items-center justify-between active:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-primary font-bold">category</span>
-                    <span className="text-[15px] font-bold text-text-dark uppercase tracking-tight">Marketplace Services</span>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Username / Email</label>
+                    <input 
+                      className="w-full px-5 py-3.5 bg-gray-50 border-none rounded-2xl text-[13px] font-bold text-text-dark shadow-inner outline-none focus:ring-1 focus:ring-primary"
+                      value={builderUser}
+                      onChange={e => setBuilderUser(e.target.value)}
+                    />
                   </div>
-                  <span className={`material-symbols-outlined transition-transform duration-300 ${isServiceOpen ? 'rotate-180' : ''}`}>expand_more</span>
-                </button>
 
-                {isServiceOpen && (
-                  <div className="px-8 pb-8 space-y-4 animate-in slide-in-from-top-2">
-                    <p className="text-[11px] text-gray-400 font-medium leading-relaxed">Manage categories and specialized services available to providers and customers.</p>
-                    <button 
-                      onClick={() => navigate('/admin/categories')}
-                      className="w-full py-4 bg-primary/5 text-primary border border-primary/10 rounded-2xl text-[12px] font-black uppercase tracking-widest flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
-                    >
-                      <span className="material-symbols-outlined text-sm">edit_attributes</span>
-                      Manage Categories
-                    </button>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">App Password</label>
+                    <input 
+                      type="password"
+                      className="w-full px-5 py-3.5 bg-gray-50 border-none rounded-2xl text-[13px] font-bold text-text-dark shadow-inner outline-none focus:ring-1 focus:ring-primary"
+                      value={builderPass}
+                      onChange={e => setBuilderPass(e.target.value)}
+                    />
                   </div>
-                )}
-              </div>
 
-              <div className="pt-4">
+                  <button 
+                    onClick={applyUriBuilder}
+                    className="w-full py-4 bg-gray-50 text-primary rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-sm active:bg-gray-100"
+                  >
+                    Sync Parameters
+                  </button>
+                </div>
+              </section>
+
+              <div className="flex gap-4">
                 <button 
                   onClick={handleSaveAll}
                   disabled={isSaving}
-                  className="w-full py-5 bg-primary text-white rounded-[2rem] text-[12px] font-black uppercase tracking-[0.2em] shadow-btn-glow active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                  className="flex-1 bg-primary text-white py-5 rounded-3xl font-black text-[11px] uppercase tracking-widest shadow-btn-glow active:scale-95 transition-all disabled:opacity-50"
                 >
-                  {isSaving ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : 'Save Configuration'}
+                  {isSaving ? 'Saving...' : 'Deploy Global'}
+                </button>
+                <button 
+                  onClick={handleTestEmail}
+                  disabled={isTestingEmail}
+                  className="flex-1 bg-white border border-gray-100 text-text-dark py-5 rounded-3xl font-black text-[11px] uppercase tracking-widest active:bg-gray-50 transition-all flex items-center justify-center gap-2"
+                >
+                  {isTestingEmail ? <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div> : <span className="material-symbols-outlined text-lg">bolt</span>}
+                  Test Verify
                 </button>
               </div>
+
+              {emailLastError && (
+                <div className="bg-red-50 p-4 rounded-2xl border border-red-100 text-red-500 text-[10px] font-bold">
+                  ERROR: {emailLastError}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -303,21 +357,19 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
 
       <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white/95 border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.06)] backdrop-blur-md">
         <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all">
-          <span className="material-symbols-outlined text-[26px] font-normal">grid_view</span>
+          <div className="w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[26px] font-normal">grid_view</span></div>
           <span className="text-[9px] uppercase tracking-[0.2em] font-normal">HOME</span>
         </button>
-        <button onClick={() => navigate('/admin/users')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all">
-          <span className="material-symbols-outlined text-[26px] font-normal">group</span>
+        <button onClick={() => navigate('/admin/users')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-30 transition-all">
+          <div className="w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[26px] font-normal">group</span></div>
           <span className="text-[9px] uppercase tracking-[0.2em] font-normal">USERS</span>
         </button>
-        <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all">
-          <span className="material-symbols-outlined text-[26px] font-normal">format_list_bulleted</span>
+        <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-30 transition-all">
+          <div className="w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[26px] font-normal">format_list_bulleted</span></div>
           <span className="text-[9px] uppercase tracking-[0.2em] font-normal">QUERIES</span>
         </button>
         <button className="flex-1 flex flex-col items-center gap-1 text-primary">
-          <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-2xl">
-            <span className="material-symbols-outlined text-[26px] font-normal">person</span>
-          </div>
+          <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[26px] font-normal">person</span></div>
           <span className="text-[9px] uppercase tracking-[0.2em] font-normal">PROFILE</span>
         </button>
       </nav>

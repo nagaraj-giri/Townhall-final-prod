@@ -145,7 +145,8 @@ const App: React.FC = () => {
           <Route path="/leads" element={user?.role === UserRole.PROVIDER ? <ProviderLeads user={user!} /> : <Navigate to="/" />} />
           <Route path="/storefront" element={user ? <ProviderStorefront user={user!} /> : <Navigate to="/login" />} />
           <Route path="/admin/users" element={user?.role === UserRole.ADMIN ? <AdminUsers /> : <Navigate to="/" />} />
-          <Route path="/admin/user/:id" element={user?.role === UserRole.ADMIN ? <AdminUserDetails /> : <Navigate to="/" />} />
+          {/* Added adminUser prop to AdminUserDetails to fix missing prop error */}
+          <Route path="/admin/user/:id" element={user?.role === UserRole.ADMIN ? <AdminUserDetails adminUser={user!} /> : <Navigate to="/" />} />
           <Route path="/rfq/:id" element={renderRFQDetail()} />
           <Route path="/chat/:id" element={user?.role === UserRole.PROVIDER ? <ProviderChat user={user!} /> : <CustomerMessages user={user!} />} />
           <Route path="/profile" element={renderProfile()} />

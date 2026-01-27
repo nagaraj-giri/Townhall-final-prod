@@ -1,3 +1,4 @@
+
 import { RFQ } from '../types';
 
 export interface MatcherState {
@@ -9,8 +10,7 @@ export interface MatcherState {
 }
 
 /**
- * Pure function to calculate current matching state based on RFQ age and quote count.
- * Follows the 0-2, 3-4, 5+ minute phase logic.
+ * Calculates the current matching state based on the provided UAE marketplace rules.
  */
 export const getMatchingState = (rfq: RFQ): MatcherState => {
   const createdAt = new Date(rfq.createdAt).getTime();
@@ -18,34 +18,32 @@ export const getMatchingState = (rfq: RFQ): MatcherState => {
   const elapsedMins = (now - createdAt) / 60000;
 
   const state: MatcherState = {
-    currentRadius: 3,
+    currentRadius: rfq.searchRadius || 3,
     showExpansion8km: false,
     showExpansion15km: false,
     showModifyWarning: false,
     isMatchingFinished: false
   };
 
-  // 1. Check if matching was explicitly stopped by user
-  if (rfq.matchingStopped) {
-    state.currentRadius = rfq.searchRadius || 3;
+  // Hard Constraint: Process stops if user explicitly stopped it or query is closed
+  if (rfq.matchingStopped || rfq.status === 'COMPLETED' || rfq.status === 'CANCELED') {
     state.isMatchingFinished = true;
     return state;
   }
 
-  // --- PHASE 1: 0-2 MINUTES ---
+  // --- PHASE 1: Immediate Local (0–2 minutes) ---
   if (elapsedMins < 3) {
     state.currentRadius = 3;
-    
-    // Evaluation at the "end" of Phase 1 (approaching 2-3 mins mark)
-    if (elapsedMins >= 2 && rfq.quotesCount >= 7 && !rfq.expansionApproved_8km) {
+    // Check threshold at the 2-minute mark (or when quotes reach 7)
+    if (rfq.quotesCount >= 7 && !rfq.expansionApproved_8km) {
       state.showExpansion8km = true;
     }
     return state;
   }
 
-  // --- PHASE 2: 3-4 MINUTES ---
+  // --- PHASE 2: Extended Local (3–4 minutes) ---
   if (elapsedMins >= 3 && elapsedMins < 5) {
-    // If not approved and we hit 7+ quotes, we stay at 3 and ask
+    // If quotes were high in phase 1 and no approval, stay at 3km
     if (rfq.quotesCount >= 7 && !rfq.expansionApproved_8km) {
       state.currentRadius = 3;
       state.showExpansion8km = true;
@@ -54,35 +52,33 @@ export const getMatchingState = (rfq: RFQ): MatcherState => {
       state.currentRadius = 8;
     }
 
-    // Prepare for Phase 3 prompt during Phase 2
-    // If we reach 7+ quotes in Phase 2 radius, ask about Phase 3
+    // Prepare for Phase 3 threshold during Phase 2
     if (state.currentRadius === 8 && rfq.quotesCount >= 7 && !rfq.expansionApproved_15km) {
-      // We only show Phase 3 popup once we are in Phase 2
-      // Logic: "If total reaches 7 or more, system displays popup... proceeds to Phase 3"
       state.showExpansion15km = true;
     }
     return state;
   }
 
-  // --- PHASE 3: 5+ MINUTES ---
+  // --- PHASE 3: Final Expansion (After 5 minutes) ---
   if (elapsedMins >= 5) {
-    // Determine if we should be at 15km
-    const canExpandTo15 = (rfq.quotesCount < 15) || rfq.expansionApproved_15km;
+    // Hard Constraint: System never exceeds 15km
+    const hasEnoughQuotes = rfq.quotesCount >= 15;
     
-    if (canExpandTo15) {
-       // Check if expansion to 8 was declined earlier (redundant due to matchingStopped, but safe)
-       state.currentRadius = 15;
+    if (hasEnoughQuotes && !rfq.expansionApproved_15km) {
+      // Stay at 8km if they have 15+ quotes and didn't approve expansion
+      state.currentRadius = 8;
+      state.showExpansion15km = true;
     } else {
-       state.currentRadius = 8;
+      // Auto-expand to 15km if < 15 quotes OR approved
+      state.currentRadius = 15;
     }
 
-    // Completion Check: After full search range (using 7 mins as buffer for Phase 3 notifications)
+    // Completion Check: After 7 mins, suggest modification if quotes are still low
     if (elapsedMins > 7 && rfq.quotesCount < 10) {
       state.showModifyWarning = true;
     }
 
     state.isMatchingFinished = true;
-    return state;
   }
 
   return state;

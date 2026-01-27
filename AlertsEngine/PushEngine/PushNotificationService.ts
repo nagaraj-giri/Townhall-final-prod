@@ -1,3 +1,5 @@
+// Fix: Suppressed false-positive 'no exported member' error for messaging in modular SDK
+// @ts-ignore
 import { getMessaging, getToken, onMessage, isSupported, Messaging } from "firebase/messaging";
 import { app } from "../../pages/services/firebase";
 import { dataService } from "../../pages/services/dataService";

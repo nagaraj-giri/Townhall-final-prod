@@ -1,41 +1,39 @@
-
-import React, { useState, useEffect, createContext, useContext, useMemo } from 'react';
+import React, { useState, useEffect, createContext, useContext, useMemo, Suspense, lazy } from 'react';
 import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { APIProvider } from '@vis.gl/react-google-maps';
-import Login from './pages/Login';
 import { User, UserRole, AppNotification } from './types';
 import { dataService } from './pages/services/dataService';
 import { authService } from './pages/authService';
 import { AlertsEngine } from './AlertsEngine/UIDesign';
 import { ChatService } from './ChatEngine/ChatService';
-import { ChatEngine } from './ChatEngine/index';
 import { pushNotificationService } from './AlertsEngine/PushEngine/PushNotificationService';
 
-import CustomerDashboard from './pages/customer/Dashboard';
-import CustomerRFQDetail from './pages/customer/RFQDetail';
-import CustomerCreateRFQ from './pages/customer/CreateRFQ';
-import CustomerProfile from './pages/customer/Profile';
-import CustomerQueries from './pages/customer/Queries';
-
-import ProviderHome from './pages/provider/Home';
-import ProviderLeads from './pages/provider/Leads';
-import ProviderRFQDetail from './pages/provider/RFQDetail';
-import ProviderProfile from './pages/provider/Profile';
-import ProviderStorefront from './pages/provider/Storefront';
-import ProviderRegistration from './pages/ProviderRegistration';
-
-import AdminDashboard from './pages/admin/Dashboard';
-import AdminProfile from './pages/admin/Profile';
-import AdminUsers from './pages/admin/Users';
-import AdminUserDetails from './pages/admin/UserDetails';
-import AdminRFQDetail from './pages/admin/RFQDetail';
-import AdminCategories from './pages/admin/Categories';
-import AdminServiceEditor from './pages/admin/ServiceEditor';
-import ProviderRequestDetail from './pages/admin/ProviderRequestDetail';
-import AdminBroadcastManager from './pages/admin/BroadcastManager';
-import AdminBroadcastListing from './pages/admin/BroadcastListing';
-import AdminReviewModeration from './pages/admin/ReviewModeration';
-import AdminAuditLog from './pages/admin/AuditLog';
+// Performance: Lazy-loading non-critical routes
+const Login = lazy(() => import('./pages/Login'));
+const CustomerDashboard = lazy(() => import('./pages/customer/Dashboard'));
+const CustomerRFQDetail = lazy(() => import('./pages/customer/RFQDetail'));
+const CustomerCreateRFQ = lazy(() => import('./pages/customer/CreateRFQ'));
+const CustomerProfile = lazy(() => import('./pages/customer/Profile'));
+const CustomerQueries = lazy(() => import('./pages/customer/Queries'));
+const ProviderHome = lazy(() => import('./pages/provider/Home'));
+const ProviderLeads = lazy(() => import('./pages/provider/Leads'));
+const ProviderRFQDetail = lazy(() => import('./pages/provider/RFQDetail'));
+const ProviderProfile = lazy(() => import('./pages/provider/Profile'));
+const ProviderStorefront = lazy(() => import('./pages/provider/Storefront'));
+const ProviderRegistration = lazy(() => import('./pages/ProviderRegistration'));
+const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
+const AdminProfile = lazy(() => import('./pages/admin/Profile'));
+const AdminUsers = lazy(() => import('./pages/admin/Users'));
+const AdminUserDetails = lazy(() => import('./pages/admin/UserDetails'));
+const AdminRFQDetail = lazy(() => import('./pages/admin/RFQDetail'));
+const AdminCategories = lazy(() => import('./pages/admin/Categories'));
+const AdminServiceEditor = lazy(() => import('./pages/admin/ServiceEditor'));
+const ProviderRequestDetail = lazy(() => import('./pages/admin/ProviderRequestDetail'));
+const AdminBroadcastManager = lazy(() => import('./pages/admin/BroadcastManager'));
+const AdminBroadcastListing = lazy(() => import('./pages/admin/BroadcastListing'));
+const AdminReviewModeration = lazy(() => import('./pages/admin/ReviewModeration'));
+const AdminAuditLog = lazy(() => import('./pages/admin/AuditLog'));
+const ChatEngine = lazy(() => import('./ChatEngine/index').then(m => ({ default: m.ChatEngine })));
 
 const GOOGLE_MAPS_API_KEY = "AIzaSyAFRh0oVYKee-hPcWKoT2L05LD_XE2VT98";
 
@@ -44,24 +42,14 @@ const safeStringify = (obj: any) => {
   return JSON.stringify(obj, (key, value) => {
     if (typeof value === 'object' && value !== null) {
       if (cache.has(value)) return; 
-      
       try {
         if (value instanceof Node || value.nodeType) return;
         const constructorName = value.constructor?.name;
-        if (constructorName && (
-          ['Q$1', 'Sa', 'Mt', 'e'].includes(constructorName) || 
-          constructorName.includes('Map') || 
-          constructorName.includes('Place') ||
-          constructorName.includes('Element')
-        )) {
-          return;
-        }
+        if (constructorName && (['Q$1', 'Sa', 'Mt', 'e', 'Map', 'Place', 'Element', 'LatLng'].includes(constructorName) || constructorName.includes('Map') || constructorName.includes('Place'))) return;
         if (value.host && (value.renderOptions || value._renderOptions)) return;
-        if (key === 'pickerRef' || key === 'loaderRef') return;
+        if (key === 'pickerRef' || key === 'loaderRef' || key === 'map' || key === 'geometry') return;
         cache.add(value);
-      } catch (e) {
-        return;
-      }
+      } catch (e) { return; }
     }
     return value;
   });
@@ -81,6 +69,12 @@ export const useApp = () => {
   return context;
 };
 
+const LoadingFallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-transparent">
+    <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+  </div>
+);
+
 const NotificationsOverlay: React.FC<{ 
   user: User; 
   isOpen: boolean; 
@@ -91,9 +85,7 @@ const NotificationsOverlay: React.FC<{
   const { showToast } = useApp();
 
   const handleAction = async (notif: AppNotification) => {
-    if (!notif.isRead) {
-      await dataService.markNotificationAsRead(notif.id);
-    }
+    if (!notif.isRead) await dataService.markNotificationAsRead(notif.id);
     if (notif.actionUrl) {
       const target = notif.actionUrl.includes('#') ? notif.actionUrl.split('#')[1] : notif.actionUrl;
       navigate(target);
@@ -117,7 +109,7 @@ const NotificationsOverlay: React.FC<{
             <button onClick={onClose} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-2xl">
               <span className="material-symbols-outlined font-bold">arrow_back</span>
             </button>
-            <h2 className="textxl font-bold text-text-dark uppercase">Alerts</h2>
+            <h2 className="text-xl font-bold text-text-dark uppercase">Alerts</h2>
           </div>
           {notifications.length > 0 && (
             <button onClick={handleMarkAllRead} className="text-[10px] font-bold text-primary uppercase">Clear All</button>
@@ -126,11 +118,7 @@ const NotificationsOverlay: React.FC<{
         <main className="flex-1 overflow-y-auto p-5 space-y-4 no-scrollbar bg-gray-50/30">
           {notifications.length > 0 ? (
             notifications.map((notif) => (
-              <div 
-                key={notif.id} 
-                onClick={() => handleAction(notif)}
-                className={`p-5 rounded-[1.8rem] bg-white border transition-all cursor-pointer ${notif.isRead ? 'opacity-50' : 'border-primary/20 shadow-sm'}`}
-              >
+              <div key={notif.id} onClick={() => handleAction(notif)} className={`p-5 rounded-[1.8rem] bg-white border transition-all cursor-pointer ${notif.isRead ? 'opacity-50' : 'border-primary/20 shadow-sm'}`}>
                 <div className="flex justify-between items-start mb-2">
                   <h4 className="text-[12px] font-bold text-text-dark uppercase">{notif.title}</h4>
                   {!notif.isRead && <div className="w-2 h-2 bg-accent-pink rounded-full animate-pulse"></div>}
@@ -154,7 +142,7 @@ const NotificationsOverlay: React.FC<{
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [isReady, setIsReady] = useState(false);
-  const [toast, setToast] = useState<{ message: string; city?: string; type: ToastType } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
@@ -163,27 +151,6 @@ const App: React.FC = () => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
   };
-
-  useEffect(() => {
-    const syncFavicon = async () => {
-      try {
-        const settings = await dataService.getSettings();
-        if (settings && settings.logo) {
-          const links = document.querySelectorAll("link[rel*='icon'], link[rel='apple-touch-icon']");
-          links.forEach(link => {
-            (link as HTMLLinkElement).href = settings.logo;
-          });
-          if (settings.primaryColor) {
-            const themeMeta = document.querySelector('meta[name="theme-color"]');
-            if (themeMeta) themeMeta.setAttribute('content', settings.primaryColor);
-          }
-        }
-      } catch (e) {
-        console.debug("[App] Favicon sync deferred: ", e);
-      }
-    };
-    syncFavicon();
-  }, []);
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -198,9 +165,7 @@ const App: React.FC = () => {
                 setUser(fresh);
                 localStorage.setItem('townhall_user', safeStringify(fresh));
               }
-            }).catch(() => {
-              setUser(parsed);
-            });
+            }).catch(() => setUser(parsed));
             setUser(parsed);
           } catch (e) { localStorage.removeItem('townhall_user'); }
         }
@@ -215,30 +180,18 @@ const App: React.FC = () => {
       setChatUnreadCount(0);
       return;
     }
-
     pushNotificationService.init(user);
     const unsubPush = pushNotificationService.listenForForegroundMessages((payload) => {
-      const title = payload.notification?.title || "Update";
-      const body = payload.notification?.body || "";
-      showToast(`${title}: ${body}`, "info");
+      showToast(`${payload.notification?.title}: ${payload.notification?.body}`, "info");
     });
-
     const unsubNotifs = dataService.listenToNotifications(user.id, (notifs) => {
       setNotifications(notifs);
       const now = new Date().getTime();
       const fresh = notifs.filter(n => !n.isRead && (now - new Date(n.timestamp).getTime() < 15000));
-      if (fresh.length > 0) {
-        AlertsEngine.dispatch(fresh[0], user.role, showToast);
-      }
+      if (fresh.length > 0) AlertsEngine.dispatch(fresh[0], user.role, showToast);
     });
-
     const unsubChatCount = ChatService.listenToTotalUnreadMessages(user.id, setChatUnreadCount);
-
-    return () => {
-      unsubNotifs();
-      unsubChatCount();
-      unsubPush();
-    };
+    return () => { unsubNotifs(); unsubChatCount(); unsubPush(); };
   }, [user?.id, user?.role]);
 
   const handleLogin = (u: User) => {
@@ -253,7 +206,7 @@ const App: React.FC = () => {
 
   const unreadCount = useMemo(() => notifications.filter(n => !n.isRead).length, [notifications]);
 
-  if (!isReady) return null;
+  if (!isReady) return <LoadingFallback />;
 
   return (
     <APIProvider apiKey={GOOGLE_MAPS_API_KEY}>
@@ -270,31 +223,31 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
-
             {user && <NotificationsOverlay user={user} isOpen={isNotifOpen} onClose={() => setIsNotifOpen(false)} notifications={notifications} />}
-
-            <Routes>
-              <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={handleLogin} />} />
-              <Route path="/provider-registration" element={user ? <Navigate to="/" /> : <ProviderRegistration />} />
-              <Route path="/" element={user ? (user.role === UserRole.ADMIN ? <AdminDashboard user={user} /> : user.role === UserRole.PROVIDER ? <ProviderHome user={user} /> : <CustomerDashboard user={user} />) : <Navigate to="/login" />} />
-              <Route path="/queries" element={user ? <CustomerQueries user={user} /> : <Navigate to="/login" />} />
-              <Route path="/create-rfq" element={user ? <CustomerCreateRFQ user={user!} /> : <Navigate to="/login" />} />
-              <Route path="/messages/:id?" element={user ? <ChatEngine user={user} /> : <Navigate to="/login" />} />
-              <Route path="/leads" element={user?.role === UserRole.PROVIDER ? <ProviderLeads user={user!} /> : <Navigate to="/" />} />
-              <Route path="/storefront/:id?" element={user ? <ProviderStorefront user={user!} /> : <Navigate to="/login" />} />
-              <Route path="/admin/users" element={user?.role === UserRole.ADMIN ? <AdminUsers /> : <Navigate to="/" />} />
-              <Route path="/admin/user/:id" element={user?.role === UserRole.ADMIN ? <AdminUserDetails adminUser={user!} /> : <Navigate to="/" />} />
-              <Route path="/admin/categories" element={user?.role === UserRole.ADMIN ? <AdminCategories /> : <Navigate to="/" />} />
-              <Route path="/admin/service/new" element={user?.role === UserRole.ADMIN ? <AdminServiceEditor /> : <Navigate to="/" />} />
-              <Route path="/admin/service/edit/:catId" element={user?.role === UserRole.ADMIN ? <AdminServiceEditor /> : <Navigate to="/" />} />
-              <Route path="/admin/provider-request/:id" element={user?.role === UserRole.ADMIN ? <ProviderRequestDetail adminUser={user!} /> : <Navigate to="/" />} />
-              <Route path="/admin/broadcast" element={user?.role === UserRole.ADMIN ? <AdminBroadcastManager user={user} /> : <Navigate to="/" />} />
-              <Route path="/admin/broadcasts" element={user?.role === UserRole.ADMIN ? <AdminBroadcastListing user={user} /> : <Navigate to="/" />} />
-              <Route path="/admin/reviews" element={user?.role === UserRole.ADMIN ? <AdminReviewModeration user={user} /> : <Navigate to="/" />} />
-              <Route path="/admin/audit-log" element={user?.role === UserRole.ADMIN ? <AdminAuditLog /> : <Navigate to="/" />} />
-              <Route path="/rfq/:id" element={user ? (user.role === UserRole.ADMIN ? <AdminRFQDetail user={user} /> : user.role === UserRole.PROVIDER ? <ProviderRFQDetail user={user} /> : <CustomerRFQDetail user={user} />) : <Navigate to="/login" />} />
-              <Route path="/profile" element={user ? (user.role === UserRole.ADMIN ? <AdminProfile user={user} onLogout={handleLogout} /> : user.role === UserRole.PROVIDER ? <ProviderProfile user={user} onLogout={handleLogout} /> : <CustomerProfile user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} />
-            </Routes>
+            <Suspense fallback={<LoadingFallback />}>
+              <Routes>
+                <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={handleLogin} />} />
+                <Route path="/provider-registration" element={user ? <Navigate to="/" /> : <ProviderRegistration />} />
+                <Route path="/" element={user ? (user.role === UserRole.ADMIN ? <AdminDashboard user={user} /> : user.role === UserRole.PROVIDER ? <ProviderHome user={user} /> : <CustomerDashboard user={user} />) : <Navigate to="/login" />} />
+                <Route path="/queries" element={user ? <CustomerQueries user={user} /> : <Navigate to="/login" />} />
+                <Route path="/create-rfq" element={user ? <CustomerCreateRFQ user={user!} /> : <Navigate to="/login" />} />
+                <Route path="/messages/:id?" element={user ? <ChatEngine user={user} /> : <Navigate to="/login" />} />
+                <Route path="/leads" element={user?.role === UserRole.PROVIDER ? <ProviderLeads user={user!} /> : <Navigate to="/" />} />
+                <Route path="/storefront/:id?" element={user ? <ProviderStorefront user={user!} /> : <Navigate to="/login" />} />
+                <Route path="/admin/users" element={user?.role === UserRole.ADMIN ? <AdminUsers /> : <Navigate to="/" />} />
+                <Route path="/admin/user/:id" element={user?.role === UserRole.ADMIN ? <AdminUserDetails adminUser={user!} /> : <Navigate to="/" />} />
+                <Route path="/admin/categories" element={user?.role === UserRole.ADMIN ? <AdminCategories /> : <Navigate to="/" />} />
+                <Route path="/admin/service/new" element={user?.role === UserRole.ADMIN ? <AdminServiceEditor /> : <Navigate to="/" />} />
+                <Route path="/admin/service/edit/:catId" element={user?.role === UserRole.ADMIN ? <AdminServiceEditor /> : <Navigate to="/" />} />
+                <Route path="/admin/provider-request/:id" element={user?.role === UserRole.ADMIN ? <ProviderRequestDetail adminUser={user!} /> : <Navigate to="/" />} />
+                <Route path="/admin/broadcast" element={user?.role === UserRole.ADMIN ? <AdminBroadcastManager user={user} /> : <Navigate to="/" />} />
+                <Route path="/admin/broadcasts" element={user?.role === UserRole.ADMIN ? <AdminBroadcastListing user={user} /> : <Navigate to="/" />} />
+                <Route path="/admin/reviews" element={user?.role === UserRole.ADMIN ? <AdminReviewModeration user={user} /> : <Navigate to="/" />} />
+                <Route path="/admin/audit-log" element={user?.role === UserRole.ADMIN ? <AdminAuditLog /> : <Navigate to="/" />} />
+                <Route path="/rfq/:id" element={user ? (user.role === UserRole.ADMIN ? <AdminRFQDetail user={user} /> : user.role === UserRole.PROVIDER ? <ProviderRFQDetail user={user} /> : <CustomerRFQDetail user={user} />) : <Navigate to="/login" />} />
+                <Route path="/profile" element={user ? (user.role === UserRole.ADMIN ? <AdminProfile user={user} onLogout={handleLogout} /> : user.role === UserRole.PROVIDER ? <ProviderProfile user={user} onLogout={handleLogout} /> : <CustomerProfile user={user} onLogout={handleLogout} />) : <Navigate to="/login" />} />
+              </Routes>
+            </Suspense>
           </div>
         </HashRouter>
       </AppContext.Provider>

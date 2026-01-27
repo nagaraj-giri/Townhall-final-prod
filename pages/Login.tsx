@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { authService } from './authService';
@@ -13,6 +14,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -23,37 +25,26 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     const fetchLogo = async () => {
       try {
         const settings = await dataService.getSettings();
-        if (settings && settings.logo) {
-          setLogoUrl(settings.logo);
-        }
-      } catch (err) {
-        console.error("Failed to load settings logo", err);
-      }
+        if (settings && settings.logo) setLogoUrl(settings.logo);
+      } catch (err) {}
     };
     fetchLogo();
   }, []);
 
-  /**
-   * Seamless Experience: Warm up geolocation permissions when user intends to join.
-   * This prevents a surprising prompt exactly when they hit the "Join" button.
-   */
-  useEffect(() => {
-    if (activeTab === 'signup') {
-      if ('geolocation' in navigator) {
-        // Silent request to trigger permission prompt while user is filling fields
-        navigator.geolocation.getCurrentPosition(() => {}, () => {}, { timeout: 2000 });
-      }
-    }
-  }, [activeTab]);
-
   const handleAuthError = (err: any) => {
-    const code = err.code || err.message || '';
-    if (code.includes('auth/invalid-credential') || code.includes('auth/wrong-password') || code.includes('auth/user-not-found')) {
-      setError('Invalid account details. Please verify your credentials or Join via Google.');
-    } else if (code.includes('auth/too-many-requests')) {
-      setError('Security delay: Too many attempts. Try again in 5 minutes.');
+    const code = err.code || '';
+    console.warn("[AuthError]", code);
+    
+    if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+      setError('Invalid email or password. If you haven\'t joined yet, please use the Join tab.');
+    } else if (code === 'auth/email-already-in-use') {
+      setError('This email is already registered. Please sign in instead.');
+    } else if (code === 'auth/weak-password') {
+      setError('Password should be at least 6 characters.');
+    } else if (code === 'auth/too-many-requests') {
+      setError('Access temporarily locked due to many failed attempts. Try again later.');
     } else {
-      setError('Connection issue. Please check your network and try again.');
+      setError('Connection error. Please check your internet and try again.');
     }
   };
 
@@ -74,16 +65,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   const handleForgotPassword = async () => {
     if (!email) {
-      setError('Enter your email above to receive a reset link.');
+      setError('Enter your email address to receive a reset link.');
       return;
     }
     setError('');
     setIsResetting(true);
     try {
       await authService.resetPassword(email);
-      showToast("Check your inbox for the reset link", "success");
+      showToast("Reset link sent to your inbox", "success");
     } catch (err: any) {
-      setError('Could not process reset. Ensure the email is correct.');
+      setError('Unable to send reset link. Verify the email address.');
     } finally {
       setIsResetting(false);
     }
@@ -105,7 +96,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden">
       <div className="absolute top-[-5%] left-[-10%] w-[200px] h-[200px] bg-white/40 rounded-full blur-3xl pointer-events-none"></div>
-      <div className="absolute top-[10%] right-[-5%] w-[180px] h-[180px] bg-secondary/10 rounded-full blur-3xl pointer-events-none"></div>
       
       <div className="relative z-10 max-w-sm w-full space-y-8 flex flex-col items-center">
         <div className="text-center space-y-2">
@@ -176,7 +166,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </div>
                 <div className="flex justify-center py-1">
                   <button 
-                    type="button"
+                    type="button" 
                     onClick={handleForgotPassword}
                     disabled={isResetting}
                     className="text-[10px] font-bold text-primary hover:underline transition-all uppercase tracking-widest flex items-center gap-2"
@@ -211,36 +201,33 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </button>
             </div>
           ) : (
-            <div className="w-full space-y-8 flex flex-col items-center py-6">
-               <div className="text-center space-y-3 px-2">
-                 <div className="w-16 h-16 bg-primary/5 text-primary rounded-3xl flex items-center justify-center mx-auto mb-2">
-                    <span className="material-symbols-outlined text-3xl font-black">join_full</span>
-                 </div>
-                 <h2 className="text-xl font-black text-text-dark tracking-tight">Create Profile</h2>
-                 <p className="text-[12px] text-gray-400 font-medium leading-relaxed">
-                   Join Dubai's premium network. For security and verification, new accounts must join via Google.
-                 </p>
-               </div>
-               
-               <button 
+            <div className="w-full space-y-6 py-4 flex flex-col items-center">
+              <div className="text-center space-y-4 mb-4">
+                <div className="w-16 h-16 bg-primary/5 rounded-full flex items-center justify-center mx-auto">
+                  <span className="material-symbols-outlined text-primary text-3xl">how_to_reg</span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-text-dark uppercase tracking-tight">One-Click Membership</h3>
+                  <p className="text-[11px] text-gray-400 font-medium leading-relaxed px-4">Join our verified UAE marketplace instantly using your Google account.</p>
+                </div>
+              </div>
+
+              <button 
                 onClick={handleGoogleAuth}
                 disabled={isLoading}
-                className="w-full bg-white border border-gray-100 text-text-dark py-5 rounded-full font-black text-[13px] uppercase tracking-widest flex items-center justify-center gap-4 hover:bg-gray-50 active:scale-95 transition-all shadow-sm disabled:opacity-50"
+                className="w-full bg-gradient-to-br from-primary to-[#7B5CC4] text-white py-5 rounded-full font-black uppercase tracking-[0.2em] text-[12px] shadow-btn-glow active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-3 min-h-[60px]"
               >
                 {isLoading ? (
-                  <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   <>
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="" />
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5 brightness-0 invert" alt="" />
                     <span>Join with Google</span>
                   </>
                 )}
               </button>
-
-              <div className="flex items-center gap-4 justify-center opacity-40 pt-2">
-                <div className="w-1.5 h-1.5 bg-accent-green rounded-full"></div>
-                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Instant • Verified • Secure</p>
-              </div>
+              
+              <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest mt-4">Verified Social Identity Required</p>
             </div>
           )}
         </div>

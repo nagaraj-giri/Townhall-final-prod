@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect } from 'react';
-// Fix: Standardize react-router-dom imports to resolve "no exported member" errors
 import { useNavigate, useLocation } from 'react-router-dom';
 import { User, RFQ } from '../../types';
 import { dataService } from '../services/dataService';
@@ -23,9 +22,9 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
   const [coords, setCoords] = useState({ lat: 25.185, lng: 55.275 });
   const [service, setService] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isAILoading, setIsAILoading] = useState(false);
+  const [isAIProcessing, setIsAIProcessing] = useState(false);
   const [availableServices, setAvailableServices] = useState<string[]>([]);
-  const [aiSuggestion, setAiSuggestion] = useState<any>(null);
+  const [requiredDocs, setRequiredDocs] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -34,7 +33,13 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
       setAvailableServices(names);
       
       const preSelected = location.state?.selectedCategory;
-      if (preSelected && names.includes(preSelected)) {
+      const initialQuery = location.state?.initialQuery;
+
+      if (initialQuery) {
+        setTitle(initialQuery);
+        // Automatically trigger AI if they came from the search bar
+        handleAIEnhance(initialQuery);
+      } else if (preSelected && names.includes(preSelected)) {
         setService(preSelected);
       } else if (names.length > 0) {
         setService(names[0]);
@@ -43,37 +48,30 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
     fetchData();
   }, [location.state]);
 
-  const handleAIConcierge = async () => {
-    if (!title.trim() && !description.trim()) {
-      showToast("Tell me a bit about what you need first!", "info");
+  const handleAIEnhance = async (queryToUse?: string) => {
+    const text = queryToUse || title;
+    if (!text || text.length < 5) {
+      showToast("Please enter a basic requirement first", "info");
       return;
     }
-    
-    setIsAILoading(true);
-    try {
-      const result = await getAIConciergeSuggestions(
-        title || description, 
-        locationName || "Dubai"
-      );
-      if (result) {
-        setAiSuggestion(result);
-        showToast("AI Concierge has optimized your request", "success");
-      }
-    } catch (err) {
-      showToast("AI is currently unavailable", "error");
-    } finally {
-      setIsAILoading(false);
-    }
-  };
 
-  const applyAISuggestion = () => {
-    if (!aiSuggestion) return;
-    setTitle(aiSuggestion.suggestedTitle);
-    setDescription(aiSuggestion.suggestedDescription);
-    if (availableServices.includes(aiSuggestion.suggestedCategory)) {
-      setService(aiSuggestion.suggestedCategory);
+    setIsAIProcessing(true);
+    try {
+      const suggestions = await getAIConciergeSuggestions(text, locationName);
+      if (suggestions) {
+        setTitle(suggestions.suggestedTitle);
+        setDescription(suggestions.suggestedDescription);
+        setRequiredDocs(suggestions.requiredDocs);
+        if (availableServices.includes(suggestions.suggestedCategory)) {
+          setService(suggestions.suggestedCategory);
+        }
+        showToast("AI Assistant optimized your request", "success");
+      }
+    } catch (e) {
+      showToast("AI Assistant is busy, please try manually", "error");
+    } finally {
+      setIsAIProcessing(false);
     }
-    setAiSuggestion(null);
   };
 
   const handleCreate = async () => {
@@ -110,7 +108,7 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
 
     try {
       await dataService.saveRFQ(rfq);
-      showToast("Query broadcasted successfully", 'success');
+      showToast("Query broadcasted to UAE Experts", 'success');
       setTimeout(() => navigate('/queries'), 800);
     } catch (err) {
       showToast("Failed to post", "error");
@@ -124,8 +122,8 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
       <div className="relative z-10 bg-[#FAF9F6] rounded-t-[3rem] w-full shadow-2xl animate-in slide-in-from-bottom duration-500 h-[94vh] flex flex-col overflow-hidden">
         <header className="px-8 pt-8 pb-4 flex justify-between items-center shrink-0">
           <div>
-            <h1 className="text-xl font-[900] text-text-dark tracking-tight leading-none uppercase">Post a Query</h1>
-            <p className="text-[9px] text-primary font-black uppercase tracking-[0.2em] mt-2">Verified UAE Marketplace</p>
+            <h1 className="text-xl font-[900] text-text-dark tracking-tight leading-none uppercase">Post Requirement</h1>
+            <p className="text-[9px] text-primary font-black uppercase tracking-[0.2em] mt-2">Verified UAE Network</p>
           </div>
           <button onClick={() => navigate(-1)} className="w-10 h-10 bg-white shadow-sm rounded-full flex items-center justify-center text-gray-400 active:scale-90 transition-all">
             <span className="material-symbols-outlined font-bold">close</span>
@@ -133,65 +131,21 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
         </header>
 
         <main className="flex-1 overflow-y-auto px-8 pb-10 space-y-6 no-scrollbar pt-4">
-          {/* AI Suggestion Banner */}
-          {aiSuggestion && (
-            <div className="bg-primary/5 border border-primary/10 rounded-[2rem] p-6 space-y-4 animate-in zoom-in-95 duration-300">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center text-white">
-                  <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-                </div>
-                <div>
-                  <h4 className="text-[12px] font-black text-text-dark uppercase tracking-tight">AI Enhancement Ready</h4>
-                  <p className="text-[10px] text-gray-500 font-medium">Documents: {aiSuggestion.requiredDocs.join(', ')}</p>
-                </div>
-              </div>
-
-              {/* Fix: Explicitly display Google Maps grounding links as per Gemini SDK requirements */}
-              {aiSuggestion.mapsLinks && aiSuggestion.mapsLinks.length > 0 && (
-                <div className="bg-white/60 rounded-2xl p-4 space-y-2 border border-primary/5">
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest px-1">Location Context:</p>
-                  <div className="flex flex-col gap-2">
-                    {aiSuggestion.mapsLinks.map((link: any, idx: number) => (
-                      <a 
-                        key={idx} 
-                        href={link.uri} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-[11px] text-primary hover:underline font-bold flex items-center gap-1.5"
-                      >
-                        <span className="material-symbols-outlined text-sm">map</span>
-                        {link.title || "View on Google Maps"}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <button 
-                onClick={applyAISuggestion}
-                className="w-full py-3 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95"
-              >
-                Apply AI Rewrite
-              </button>
-            </div>
-          )}
-
           <div className="space-y-6">
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Requirement Title</label>
                 <button 
-                  onClick={handleAIConcierge}
-                  disabled={isAILoading}
-                  className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest transition-all ${isAILoading ? 'text-gray-300' : 'text-primary'}`}
+                  onClick={() => handleAIEnhance()}
+                  disabled={isAIProcessing || title.length < 5}
+                  className="flex items-center gap-1.5 text-primary text-[10px] font-black uppercase tracking-widest disabled:opacity-30"
                 >
-                  {isAILoading ? <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div> : <span className="material-symbols-outlined text-[16px]">temp_preferences_custom</span>}
-                  AI Concierge
+                  {isAIProcessing ? 'Analyzing...' : <><span className="material-symbols-outlined text-[14px]">auto_fix_high</span> AI Assistant</>}
                 </button>
               </div>
               <input 
                 type="text" 
-                placeholder="e.g. Need Golden Visa for family" 
+                placeholder="e.g. Setting up a Freezone Company" 
                 value={title} 
                 onChange={e => setTitle(e.target.value)} 
                 className="w-full px-6 py-4.5 bg-white border border-gray-100 rounded-2xl text-[14px] font-bold text-text-dark focus:ring-1 focus:ring-primary shadow-sm placeholder-gray-300 transition-all" 
@@ -199,7 +153,7 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Official Category</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Service Stream</label>
               <div className="relative">
                 <select 
                   value={service} 
@@ -213,11 +167,11 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Precise Location</label>
-              <div className="relative flex items-center bg-white border border-gray-100 rounded-2xl shadow-sm px-4 min-h-[58px] focus-within:ring-1 focus-within:ring-primary transition-all">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Precise Location (UAE)</label>
+              <div className="relative flex items-center bg-white border border-gray-100 rounded-2xl shadow-sm px-4 min-h-[58px] focus-within:ring-1 focus-within:ring-primary transition-all pointer-events-auto">
                 <span className="material-symbols-outlined text-accent-pink text-[22px] mr-2 shrink-0">location_on</span>
                 <PlacesField 
-                  placeholder="Select area (e.g. Business Bay)"
+                  placeholder="Select District (e.g. JLT)"
                   onPlaceChange={(res) => {
                     setLocationName(res.name);
                     setCoords({ lat: res.lat, lng: res.lng });
@@ -227,14 +181,28 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Details & Context</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Context & Details</label>
               <textarea 
-                placeholder="List specific requirements, urgency, and any details that help providers quote accurately..." 
+                placeholder="Briefly describe what you need..." 
                 value={description} 
                 onChange={e => setDescription(e.target.value)} 
-                className="w-full px-6 py-5 bg-white border border-gray-100 rounded-[2.2rem] text-[14px] font-medium text-text-dark focus:ring-1 focus:ring-primary shadow-sm min-h-[180px] resize-none placeholder-gray-300 leading-relaxed" 
+                className="w-full px-6 py-5 bg-white border border-gray-100 rounded-[2.2rem] text-[14px] font-medium text-text-dark focus:ring-1 focus:ring-primary shadow-sm min-h-[160px] resize-none placeholder-gray-300 leading-relaxed" 
               />
             </div>
+
+            {requiredDocs.length > 0 && (
+              <div className="bg-primary/5 p-6 rounded-[2rem] border border-primary/10 space-y-3 animate-in fade-in zoom-in-95">
+                 <p className="text-[9px] font-black text-primary uppercase tracking-[0.2em] ml-1">AI Document Checklist</p>
+                 <div className="flex flex-wrap gap-2">
+                   {requiredDocs.map((doc, idx) => (
+                     <span key={idx} className="bg-white px-3 py-1.5 rounded-xl text-[10px] font-bold text-text-dark border border-gray-100 shadow-sm flex items-center gap-2">
+                       <span className="material-symbols-outlined text-accent-green text-[14px] font-black">check_circle</span>
+                       {doc}
+                     </span>
+                   ))}
+                 </div>
+              </div>
+            )}
           </div>
         </main>
 
