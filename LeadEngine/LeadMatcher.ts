@@ -1,10 +1,12 @@
+
 import { RFQ } from '../types';
 
 /**
- * Calculates the distance between two points in kilometers using the Haversine formula.
+ * Haversine formula for distance calculation in KM
  */
 export const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
-  const R = 6371; // Earth's radius in km
+  if (!lat1 || !lng1 || !lat2 || !lng2) return 999;
+  const R = 6371;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLng = (lng2 - lng1) * (Math.PI / 180);
   const a = 
@@ -16,46 +18,32 @@ export const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2
 };
 
 /**
- * Calculates the current active radius for an RFQ based on precise matching rules.
- * 0–2 mins: 3km
- * 3–4 mins: 8km (if quotes < 7) else ask customer.
- * 5+ mins: 15km (if quotes < 15) else ask customer.
+ * Lead Match Plan v1.2 Core Engine Logic
+ * Enforces dynamic thresholds and manual expansion triggers.
  */
-export const calculateActiveRadius = (rfq: RFQ): { radius: number; needsApproval: number | null } => {
-  const createdAt = new Date(rfq.createdAt).getTime();
-  const now = new Date().getTime();
-  const elapsedMinutes = (now - createdAt) / 60000;
-
-  if (elapsedMinutes < 3) {
-    return { radius: 3, needsApproval: null };
+export const calculateActiveRadius = (rfq: RFQ): number => {
+  if (rfq.matchingStopped) {
+    return rfq.searchRadius || 3;
   }
 
-  if (elapsedMinutes >= 3 && elapsedMinutes < 5) {
-    if (rfq.quotesCount < 7) {
-      return { radius: 8, needsApproval: null };
-    }
-    return { 
-      radius: rfq.expansionApproved_8km ? 8 : 3, 
-      needsApproval: rfq.expansionApproved_8km ? null : 8 
-    };
+  const createdAt = rfq.createdAt ? new Date(rfq.createdAt).getTime() : Date.now();
+  const now = Date.now();
+  const elapsedMins = (now - createdAt) / 60000;
+  const quotes = rfq.quotesCount || 0;
+
+  // PRD Rule: If saturation reached (15 quotes), no further expansion.
+  if (quotes >= 15) return rfq.searchRadius || 15;
+
+  // Phase 1: 0–2 mins | Radius: 3 km
+  if (elapsedMins <= 2) return 3;
+
+  // Phase 2: 3–4 mins | Radius: 8 km (Triggered only if < 7 quotes OR manually approved)
+  if (elapsedMins <= 5) {
+    if (quotes >= 7 && !rfq.expansionApproved_8km) return 3;
+    return 8;
   }
 
-  if (elapsedMinutes >= 5) {
-    if (rfq.quotesCount < 15) {
-      return { radius: 15, needsApproval: null };
-    }
-    const currentRadius = rfq.expansionApproved_15km ? 15 : (rfq.expansionApproved_8km ? 8 : 3);
-    return { 
-      radius: currentRadius, 
-      needsApproval: rfq.expansionApproved_15km ? null : 15 
-    };
-  }
-
-  return { radius: 3, needsApproval: null };
-};
-
-export const shouldShowModifyWarning = (rfq: RFQ): boolean => {
-  const createdAt = new Date(rfq.createdAt).getTime();
-  const elapsedMinutes = (new Date().getTime() - createdAt) / 60000;
-  return elapsedMinutes > 7 && rfq.quotesCount < 10;
+  // Phase 3: 5+ mins | Radius: 15 km (Hard Constraint: Max 15km)
+  if (quotes >= 7 && !rfq.expansionApproved_15km) return rfq.expansionApproved_8km ? 8 : 3;
+  return 15;
 };

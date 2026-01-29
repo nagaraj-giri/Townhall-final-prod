@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, RFQ, Quote } from '../../types';
 import { dataService } from '../services/dataService';
 import { useApp } from '../../App';
-import { calculateDistance } from '../../LeadEngine/LeadMatcher';
+import { calculateDistance, calculateActiveRadius } from '../../LeadEngine/LeadMatcher';
 
 interface LeadsProps {
   user: User;
@@ -11,24 +11,38 @@ interface LeadsProps {
 
 type ProviderTab = 'Active' | 'Pending' | 'Accepted' | 'Completed';
 
+// Keywords helper aligned with DataService - Support 2-char words like "IT" or "PR"
+const getKeywords = (str: string) => {
+  return new Set((str || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length >= 2));
+};
+
+const isFuzzyMatch = (str1: string, str2: string) => {
+  const k1 = getKeywords(str1);
+  const k2 = getKeywords(str2);
+  for (let word of k1) {
+    if (k2.has(word)) return true;
+  }
+  return false;
+};
+
 const Leads: React.FC<LeadsProps> = ({ user }) => {
   const navigate = useNavigate();
   const { chatUnreadCount, unreadCount, toggleNotifications } = useApp();
   const [activeTab, setActiveTab] = useState<ProviderTab>('Active');
   const [allRfqs, setAllRfqs] = useState<RFQ[]>([]);
   const [myQuotes, setMyQuotes] = useState<Quote[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [rfqsLoaded, setRfqsLoaded] = useState(false);
+  const [quotesLoaded, setQuotesLoaded] = useState(false);
 
   useEffect(() => {
-    // Real-time listener for all marketplace queries
     const unsubRfqs = dataService.listenToRFQs((rfqs) => {
       setAllRfqs(rfqs);
-      setIsLoading(false);
+      setRfqsLoaded(true);
     });
 
-    // Real-time listener for the current provider's bids
-    const unsubQuotes = dataService.listenToQuotes((quotes) => {
-       setMyQuotes(quotes.filter(q => q.providerId === user.id));
+    const unsubQuotes = dataService.listenToQuotesByProvider(user.id, (quotes) => {
+       setMyQuotes(quotes);
+       setQuotesLoaded(true);
     });
 
     return () => {
@@ -37,70 +51,66 @@ const Leads: React.FC<LeadsProps> = ({ user }) => {
     };
   }, [user.id]);
 
-  const getFilteredList = () => {
+  const currentList = useMemo(() => {
+    if (!rfqsLoaded || !quotesLoaded) return [];
+
     if (activeTab === 'Active') {
-      // Leads looking for providers that I haven't bid on yet
       const myQuoteRfqIds = myQuotes.map(q => q.rfqId);
+
       return allRfqs.filter(r => {
         if (r.status === 'CANCELED' || r.status === 'COMPLETED' || r.status === 'ACCEPTED') return false;
         
-        const isCategoryMatch = (user.services || []).includes(r.service);
+        // 1. Service Match
+        const isCategoryMatch = (user.services || []).some(s => isFuzzyMatch(s, r.service));
+        if (!isCategoryMatch) return false;
+
         const isOpen = (r.status === 'OPEN' || r.status === 'ACTIVE');
         const notBidYet = !myQuoteRfqIds.includes(r.id);
         
-        const distance = (user.location && r.lat) 
-          ? calculateDistance(user.location.lat, user.location.lng, r.lat, r.lng)
-          : 999;
-        
-        const isWithinRadius = distance <= (r.searchRadius || 3);
+        // Use user location from profile or fallback to center of Dubai
+        const pLat = Number(user.location?.lat || 25.185);
+        const pLng = Number(user.location?.lng || 55.275);
+        const rLat = Number(r.lat);
+        const rLng = Number(r.lng);
 
-        return isCategoryMatch && isOpen && notBidYet && isWithinRadius;
+        if (isNaN(pLat) || isNaN(pLng) || isNaN(rLat) || isNaN(rLng)) return false;
+
+        // 2. Dynamic Distance Match (v1.2 Lead Match Plan)
+        const distance = calculateDistance(pLat, pLng, rLat, rLng);
+        const activeRadius = calculateActiveRadius(r);
+        
+        // Hard Constraint: System must never match beyond 15 km
+        if (distance > 15) return false;
+
+        const isWithinActiveRadius = distance <= activeRadius;
+
+        return isOpen && notBidYet && isWithinActiveRadius;
       });
     }
     
     if (activeTab === 'Pending') {
-      // Bids I have sent where the lead is still ACTIVE or OPEN (no final selection made yet)
-      const mySentQuotes = myQuotes.filter(q => q.status === 'SENT');
-      const mySentRfqIds = mySentQuotes.map(q => q.rfqId);
-      
-      return allRfqs.filter(r => 
-        (r.status === 'OPEN' || r.status === 'ACTIVE') && 
-        mySentRfqIds.includes(r.id)
-      );
+      const pendingRfqIds = myQuotes.filter(q => q.status === 'SENT').map(q => q.rfqId);
+      return allRfqs.filter(r => (r.status === 'OPEN' || r.status === 'ACTIVE') && pendingRfqIds.includes(r.id));
     }
     
     if (activeTab === 'Accepted') {
-      // Lead successfully won by this provider, but not yet completed
-      return allRfqs.filter(r => {
-        if (r.status !== 'ACCEPTED') return false;
-
-        const myQuoteForThis = myQuotes.find(q => q.rfqId === r.id);
-        if (!myQuoteForThis) return false;
-
-        return r.acceptedQuoteId === myQuoteForThis.id || myQuoteForThis.status === 'ACCEPTED';
-      });
+      const acceptedRfqIds = myQuotes.filter(q => q.status === 'ACCEPTED').map(q => q.rfqId);
+      return allRfqs.filter(r => acceptedRfqIds.includes(r.id) && r.status !== 'COMPLETED' && r.status !== 'CANCELED');
     }
 
     if (activeTab === 'Completed') {
-      // Lead successfully finished by this provider
-      return allRfqs.filter(r => {
-        if (r.status !== 'COMPLETED') return false;
-
-        const myQuoteForThis = myQuotes.find(q => q.rfqId === r.id);
-        if (!myQuoteForThis) return false;
-
-        return r.acceptedQuoteId === myQuoteForThis.id || myQuoteForThis.status === 'ACCEPTED';
-      });
+      const myRfqIds = myQuotes.map(q => q.rfqId);
+      return allRfqs.filter(r => r.status === 'COMPLETED' && myRfqIds.includes(r.id));
     }
     
     return [];
-  };
+  }, [activeTab, allRfqs, myQuotes, rfqsLoaded, quotesLoaded, user.services, user.location]);
 
-  const currentList = getFilteredList();
+  const isLoading = !rfqsLoaded || !quotesLoaded;
 
   return (
     <div className="flex flex-col min-h-screen pb-28 bg-transparent">
-      <header className="px-6 pt-12 pb-4 flex justify-between items-center">
+      <header className="px-6 pt-12 pb-4 flex items-center justify-between sticky top-0 bg-white/10 backdrop-blur-md z-40">
         <button onClick={() => navigate('/')} className="text-text-dark active:scale-90 transition-transform">
           <span className="material-symbols-outlined text-2xl font-black">arrow_back</span>
         </button>
@@ -121,7 +131,6 @@ const Leads: React.FC<LeadsProps> = ({ user }) => {
           </p>
         </div>
 
-        {/* Tab Bar updated to include Completed */}
         <div className="flex gap-1 justify-between bg-white rounded-full p-1 border border-gray-100 shadow-soft">
           {(['Active', 'Pending', 'Accepted', 'Completed'] as ProviderTab[]).map((tab) => (
             <button
@@ -144,7 +153,11 @@ const Leads: React.FC<LeadsProps> = ({ user }) => {
           ) : currentList.length > 0 ? (
             currentList.map((rfq) => {
               const myQuote = myQuotes.find(q => q.rfqId === rfq.id);
-              const dist = (user.location && rfq.lat) ? calculateDistance(user.location.lat, user.location.lng, rfq.lat, rfq.lng).toFixed(1) : '?';
+              const pLat = Number(user.location?.lat || 25.185);
+              const pLng = Number(user.location?.lng || 55.275);
+              const rLat = Number(rfq.lat);
+              const rLng = Number(rfq.lng);
+              const dist = (!isNaN(pLat) && !isNaN(rLat)) ? calculateDistance(pLat, pLng, rLat, rLng).toFixed(1) : '?';
               const displayLoc = (rfq.locationName || 'Dubai, UAE').split(',')[0];
 
               return (
@@ -198,7 +211,7 @@ const Leads: React.FC<LeadsProps> = ({ user }) => {
                <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center text-gray-100 shadow-soft mb-8">
                   <span className="material-symbols-outlined text-6xl font-light">search_off</span>
                </div>
-               <p className="text-[12px] font-black text-gray-300 uppercase tracking-[0.3em] leading-relaxed">
+               <p className="text-[12px] font-black text-gray-300 uppercase tracking-[0.3em] text-center leading-relaxed max-w-[200px]">
                  {activeTab === 'Completed' ? 'NO COMPLETED PROJECTS YET' : activeTab === 'Accepted' ? 'NO ACCEPTED PROJECTS YET' : activeTab === 'Pending' ? 'NO ACTIVE BIDS PENDING' : 'NO MATCHING LEADS NEARBY'}
                </p>
             </div>
@@ -207,7 +220,7 @@ const Leads: React.FC<LeadsProps> = ({ user }) => {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.04)]">
-        <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-60">
+        <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-60">
           <span className="material-symbols-outlined text-[28px] font-normal">home</span>
           <span className="text-[9px] font-black uppercase tracking-widest">HOME</span>
         </button>

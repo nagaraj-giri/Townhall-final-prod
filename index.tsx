@@ -2,23 +2,31 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
+const CURRENT_VERSION = '1.1.4';
 const rootElement = document.getElementById('root');
 
 if (rootElement) {
+  // Version Control - Force refresh if client cache is stale
+  const lastVersion = localStorage.getItem('townhall_build_version');
+  if (lastVersion && lastVersion !== CURRENT_VERSION) {
+    console.debug('[Versioning] New version detected. Force refreshing client...');
+    localStorage.setItem('townhall_build_version', CURRENT_VERSION);
+    window.location.reload();
+  } else {
+    localStorage.setItem('townhall_build_version', CURRENT_VERSION);
+  }
+
   const root = ReactDOM.createRoot(rootElement);
   
-  // Register Service Worker for Push Notifications (FCM)
   if ('serviceWorker' in navigator) {
     const registerSW = () => {
-      // Standard production registration for Cloud Run
-      // Ensure firebase-messaging-sw.js is in your public/dist folder
       navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: '/' })
         .then((registration) => {
-          console.debug('[ServiceWorker] Production registration active:', registration.scope);
+          console.debug('[ServiceWorker] Active:', registration.scope);
+          registration.update();
         })
         .catch((err) => {
-          // Log errors for debugging production deployment issues
-          console.warn('[ServiceWorker] Push registration failed:', err.message);
+          console.warn('[ServiceWorker] Registration failed:', err.message);
         });
     };
 
@@ -34,6 +42,4 @@ if (rootElement) {
       <App />
     </React.StrictMode>
   );
-} else {
-  console.error("Critical: Root element not found in DOM.");
 }

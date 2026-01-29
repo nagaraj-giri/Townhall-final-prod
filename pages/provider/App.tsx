@@ -35,23 +35,25 @@ const safeStringify = (obj: any) => {
     if (typeof value === 'object' && value !== null) {
       if (cache.has(value)) return; 
       try {
+        const constructorName = value.constructor?.name;
         if (
           value instanceof Node || 
           value.nodeType || 
-          (value.constructor && (
-            value.constructor.name === 'Mt' || 
-            value.constructor.name === 'e' || 
-            value.constructor.name.includes('Element') ||
-            value.constructor.name.includes('Map') ||
-            ['Q$1', 'Sa'].includes(value.constructor.name)
+          (constructorName && (
+            ['Q$1', 'Sa', 'Mt', 'e', 'Map', 'Place', 'Element', 'LatLng'].includes(constructorName) ||
+            constructorName.includes('Map') ||
+            constructorName.includes('Place') ||
+            constructorName.includes('Element')
           )) ||
+          value.gm_bindings_ ||
+          value.gm_accessors_ ||
           (value.host && (value.renderOptions || value._renderOptions)) ||
           key === 'pickerRef' || key === 'loaderRef'
         ) {
           return;
         }
+        cache.add(value);
       } catch (e) { return; }
-      cache.add(value);
     }
     return value;
   });
@@ -145,7 +147,6 @@ const App: React.FC = () => {
           <Route path="/leads" element={user?.role === UserRole.PROVIDER ? <ProviderLeads user={user!} /> : <Navigate to="/" />} />
           <Route path="/storefront" element={user ? <ProviderStorefront user={user!} /> : <Navigate to="/login" />} />
           <Route path="/admin/users" element={user?.role === UserRole.ADMIN ? <AdminUsers /> : <Navigate to="/" />} />
-          {/* Added adminUser prop to AdminUserDetails to fix missing prop error */}
           <Route path="/admin/user/:id" element={user?.role === UserRole.ADMIN ? <AdminUserDetails adminUser={user!} /> : <Navigate to="/" />} />
           <Route path="/rfq/:id" element={renderRFQDetail()} />
           <Route path="/chat/:id" element={user?.role === UserRole.PROVIDER ? <ProviderChat user={user!} /> : <CustomerMessages user={user!} />} />

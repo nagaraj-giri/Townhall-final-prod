@@ -1,10 +1,10 @@
-
 import { useApp } from '../../App';
 import { authService } from '../authService';
 import { dataService } from '../services/dataService';
 import { Quote, Review, ServiceCategory, User } from '../../types';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { PlacesField } from '../../Functions/placesfield';
 
 interface Props {
   adminUser: User;
@@ -21,6 +21,7 @@ const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
   const [loading, setLoading] = useState(true);
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [providerQuotes, setProviderQuotes] = useState<Quote[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [availableCategories, setAvailableCategories] = useState<ServiceCategory[]>([]);
@@ -30,6 +31,8 @@ const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
     name: '',
     phone: '',
     locationName: '',
+    lat: 25.185,
+    lng: 55.275,
     description: '',
     services: [] as string[],
     categories: [] as string[],
@@ -50,6 +53,8 @@ const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
           name: u.name || '',
           phone: u.phone || '',
           locationName: u.locationName || '',
+          lat: u.location?.lat || 25.185,
+          lng: u.location?.lng || 55.275,
           description: u.description || '',
           services: u.services || [],
           categories: u.categories || [],
@@ -87,19 +92,40 @@ const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
     };
   }, [providerQuotes, reviews, user]);
 
-  const activityLog = useMemo(() => {
-    const logs = [];
-    if (user?.createdAt) {
-      logs.push({ title: 'Account Created', desc: 'Initial registration and email verification', time: new Date(user.createdAt), date: new Date(user.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }), color: 'bg-gray-200' });
+  const handleApprove = async () => {
+    if (!user) return;
+    if (!window.confirm(`Finalize verification for ${user.name}? They will gain full lead access.`)) return;
+    
+    setIsApproving(true);
+    try {
+      const updatedUser: User = {
+        ...user,
+        ...editForm,
+        isVerified: true,
+        status: 'verified' as any
+      };
+      
+      await dataService.saveUser(updatedUser);
+      
+      await dataService.createAuditLog({
+        admin: adminUser,
+        title: `Business Verified: ${user.name}`,
+        type: "BUSINESS_VERIFICATION",
+        severity: "MEDIUM",
+        icon: "verified",
+        iconBg: "bg-accent-green",
+        eventId: user.id
+      });
+
+      setUser(updatedUser);
+      setIsApproving(false);
+      setIsEditing(false);
+      showToast(`${user.name} is now verified!`, "success");
+    } catch (err) {
+      showToast("Verification failed", "error");
+      setIsApproving(false);
     }
-    if (user?.lastLoginAt) {
-      logs.push({ title: 'Provider Login', desc: 'System access authenticated', time: new Date(user.lastLoginAt), date: 'Last Session', timeStr: new Date(user.lastLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), color: 'border-primary' });
-    }
-    providerQuotes.slice(0, 3).forEach(q => {
-      logs.push({ title: 'Quote Submitted', desc: `Proposal sent for RFQ #${q.rfqId.substring(0, 5).toUpperCase()}`, time: new Date(q.createdAt), date: new Date(q.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }), timeStr: new Date(q.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), color: 'bg-primary' });
-    });
-    return logs.sort((a, b) => b.time.getTime() - a.time.getTime());
-  }, [user, providerQuotes]);
+  };
 
   const handleToggleSuspend = async () => {
     if (!user) return;
@@ -132,6 +158,7 @@ const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
       name: editForm.name,
       phone: editForm.phone,
       locationName: editForm.locationName,
+      location: { lat: editForm.lat, lng: editForm.lng },
       description: editForm.description,
       gallery: editForm.gallery,
       services: editForm.services,
@@ -164,12 +191,9 @@ const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
     setIsUploading(true);
     try {
       const url = await dataService.uploadImage(file, `gallery/${user.id}/${Date.now()}`);
-      const updatedGallery = [...(user.gallery || []), url];
-      const updatedUser = { ...user, gallery: updatedGallery };
-      await dataService.saveUser(updatedUser);
-      setUser(updatedUser);
+      const updatedGallery = [...(editForm.gallery || []), url];
       setEditForm(prev => ({ ...prev, gallery: updatedGallery }));
-      showToast("Photo added to gallery", "success");
+      showToast("Photo staged for save", "success");
     } catch (err) {
       showToast("Upload failed", "error");
     } finally {
@@ -177,18 +201,9 @@ const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
     }
   };
 
-  const removePhoto = async (url: string) => {
-    if (!user) return;
-    const updatedGallery = (user.gallery || []).filter(g => g !== url);
-    const updatedUser = { ...user, gallery: updatedGallery };
-    try {
-      await dataService.saveUser(updatedUser);
-      setUser(updatedUser);
-      setEditForm(prev => ({ ...prev, gallery: updatedGallery }));
-      showToast("Photo removed", "info");
-    } catch (err) {
-      showToast("Action failed", "error");
-    }
+  const removePhoto = (url: string) => {
+    const updatedGallery = (editForm.gallery || []).filter(g => g !== url);
+    setEditForm(prev => ({ ...prev, gallery: updatedGallery }));
   };
 
   const handleSendReset = async () => {
@@ -229,10 +244,7 @@ const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
   };
 
   const handleServiceChange = (serviceName: string) => {
-    setEditForm(prev => ({
-      ...prev,
-      services: [serviceName]
-    }));
+    setEditForm(prev => ({ ...prev, services: [serviceName] }));
   };
 
   const addTag = () => {
@@ -247,7 +259,7 @@ const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
   };
 
   if (loading) return (
-    <div className="flex items-center justify-center min-h-screen bg-transparent">
+    <div className="flex items-center justify-center min-h-screen bg-[#FAF9F6]">
       <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
     </div>
   );
@@ -255,43 +267,71 @@ const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
   if (!user) return <div className="p-10 text-center font-bold text-gray-300 uppercase tracking-widest text-xs bg-transparent min-h-screen">Record not found</div>;
 
   return (
-    <div className="flex flex-col min-h-screen bg-transparent pb-10">
-      <header className="px-4 pt-10 pb-4 flex items-center justify-between sticky top-0 bg-white/20 backdrop-blur-md z-50">
-        <button onClick={() => navigate(-1)} className="text-text-dark w-10 h-10 flex items-center justify-start active:scale-90 transition-transform">
+    <div className="flex flex-col min-h-screen bg-[#FAF9F6] pb-10">
+      <header className="px-4 pt-12 pb-4 flex items-center justify-between sticky top-0 bg-white/20 backdrop-blur-md z-50">
+        <button onClick={() => navigate('/admin/users')} className="text-text-dark w-10 h-10 flex items-center justify-start active:scale-90 transition-transform">
           <span className="material-symbols-outlined font-black">arrow_back</span>
         </button>
-        <h1 className="text-[17px] font-bold text-text-dark text-center flex-1">Provider Details</h1>
-        <button className="text-text-dark w-10 h-10 flex items-center justify-end">
-          <span className="material-symbols-outlined font-black">more_vert</span>
-        </button>
+        <h1 className="text-[17px] font-bold text-text-dark text-center flex-1">Provider Console</h1>
+        <div className="w-10"></div>
       </header>
 
       <main className="px-6 space-y-8 overflow-y-auto no-scrollbar pt-2 pb-20">
+        {!user.isVerified && (
+           <div className="bg-orange-50 border-2 border-orange-100 rounded-[2.5rem] p-8 text-center space-y-5 animate-in slide-in-from-top-4 duration-500 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                 <span className="material-symbols-outlined text-[100px]">gavel</span>
+              </div>
+              <div className="w-16 h-16 bg-orange-100/50 rounded-full flex items-center justify-center mx-auto text-orange-500 relative z-10">
+                 <span className="material-symbols-outlined text-3xl font-black">verified_user</span>
+              </div>
+              <div className="relative z-10">
+                 <h3 className="text-lg font-black text-text-dark uppercase tracking-tight">Pending Verification</h3>
+                 <p className="text-[11px] text-orange-600 font-bold uppercase tracking-widest mt-1">Provider has limited platform access</p>
+              </div>
+              <button 
+                onClick={handleApprove}
+                disabled={isApproving}
+                className="w-full bg-primary text-white py-5 rounded-full font-black uppercase tracking-[0.2em] text-[12px] shadow-btn-glow active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50 relative z-10"
+              >
+                {isApproving ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : (
+                  <>
+                    <span className="material-symbols-outlined text-lg">verified</span>
+                    Finalize & Approve Business
+                  </>
+                )}
+              </button>
+           </div>
+        )}
+
         <div className="flex flex-col items-center text-center space-y-4">
           <div className="relative">
             <div className="w-28 h-28 rounded-full border-[6px] border-white shadow-lg overflow-hidden bg-gray-100 flex items-center justify-center ring-1 ring-black/5">
               <img src={user.avatar} className="w-full h-full object-cover" alt="" />
             </div>
-            {!user.isBlocked && (
+            {user.isVerified && (
               <div className="absolute bottom-1 right-1 bg-[#8BC34A] w-7 h-7 rounded-full border-4 border-white flex items-center justify-center shadow-md">
                 <span className="material-symbols-outlined text-white text-[14px] font-black">check</span>
               </div>
             )}
           </div>
           <div className="space-y-1">
-            <div className="flex items-center gap-2 justify-center">
+            <div className="flex flex-col items-center gap-1 justify-center">
               {isEditing ? (
                 <input 
-                  className="text-[22px] font-black text-text-dark bg-white border-none rounded-xl px-4 py-1 text-center outline-none focus:ring-1 focus:ring-primary shadow-inner max-w-[200px]" 
+                  className="text-[22px] font-black text-text-dark bg-white border-none rounded-xl px-4 py-1 text-center outline-none focus:ring-1 focus:ring-primary shadow-inner" 
                   value={editForm.name} 
                   onChange={e => setEditForm({...editForm, name: e.target.value})}
                 />
               ) : (
                 <h2 className="text-[22px] font-black text-text-dark tracking-tight leading-none uppercase">{user.name || 'UNNAMED PROVIDER'}</h2>
               )}
-              <span className="bg-[#EBE7F5] text-[#5B3D9D] text-[10px] font-black px-2.5 py-1 rounded-md uppercase tracking-tight">{user.role}</span>
+              <div className="flex items-center gap-2 mt-2">
+                 <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${user.isVerified ? 'bg-[#EBE7F5] text-[#5B3D9D]' : 'bg-orange-50 text-orange-500'}`}>
+                   {user.isVerified ? 'VERIFIED EXPERT' : 'UNVERIFIED ACCOUNT'}
+                 </span>
+              </div>
             </div>
-            <p className="text-[12px] font-bold text-gray-400">{user.services?.[0] || 'Market Entity'}</p>
           </div>
         </div>
 
@@ -306,158 +346,66 @@ const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
               <div className={`w-14 h-14 rounded-2xl shadow-sm flex items-center justify-center border border-white transition-all active:scale-90 ${btn.active ? 'bg-primary text-white' : 'bg-white text-text-dark'}`}>
                 {btn.loading ? <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div> : <span className="material-symbols-outlined text-[24px]">{btn.icon}</span>}
               </div>
-              <span className="text-[11px] font-bold text-gray-400">{btn.label}</span>
+              <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{btn.label}</span>
             </button>
           ))}
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-white flex flex-col items-start min-h-[110px]">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-4">QUOTES <br/> SENT</p>
-            <p className="text-[26px] font-black text-text-dark tracking-tighter">{stats.quotesSent}</p>
-          </div>
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-white flex flex-col items-start min-h-[110px]">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-4">TOTAL <br/> SALES</p>
-            <div className="flex items-baseline gap-1">
-               <p className="text-[26px] font-black text-text-dark tracking-tighter">{stats.sales}</p>
-               <p className="text-[10px] font-bold text-gray-400">AED</p>
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-white flex flex-col items-start min-h-[110px]">
-            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-4">RATING</p>
-            <div className="flex items-center gap-1">
-               <p className="text-[26px] font-black text-text-dark tracking-tighter">{stats.rating}</p>
-               <span className="material-symbols-outlined text-secondary fill-1 text-[22px]">star</span>
-            </div>
-          </div>
-        </div>
-
         <section className="space-y-4">
-           <div className="flex items-center gap-2 px-1">
-              <span className="material-symbols-outlined text-[#5B3D9D] text-[20px] font-bold">corporate_fare</span>
-              <h3 className="text-[15px] font-bold text-text-dark">Business Details</h3>
-           </div>
-           <div className="bg-white rounded-[2.2rem] shadow-sm border border-white divide-y divide-gray-50 overflow-hidden">
-              <div className="p-5 flex items-center justify-between group">
+           <h3 className="text-[13px] font-black text-gray-400 ml-1 uppercase tracking-widest">Business Profile</h3>
+           <div className="bg-white rounded-[2.5rem] shadow-card border border-white divide-y divide-gray-50 overflow-hidden">
+              <div className="p-6 flex items-center justify-between">
                 <div className="space-y-1 min-w-0 flex-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Email Address</p>
-                  <p className="text-[14px] font-bold text-text-dark truncate">{user.email || 'N/A'}</p>
+                  <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Corporate Email</p>
+                  <p className="text-[14px] font-bold text-text-dark truncate lowercase">{user.email || 'N/A'}</p>
                 </div>
-                <button onClick={() => { if(user.email) { navigator.clipboard.writeText(user.email); showToast("Copied!", "success"); } }} className="w-10 h-10 flex items-center justify-center text-gray-300 hover:text-primary transition-colors">
+                <button onClick={() => { if(user.email) { navigator.clipboard.writeText(user.email); showToast("Copied!", "success"); } }} className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-300 active:text-primary transition-colors">
                   <span className="material-symbols-outlined text-[20px]">content_copy</span>
                 </button>
               </div>
 
-              <div className="p-5 flex items-center justify-between group">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Business Phone</p>
-                  <div className="flex items-center gap-2">
-                    <img src="https://flagcdn.com/w20/ae.png" className="w-4 h-3 object-cover rounded-[1px] shadow-xs" alt="" />
-                    {isEditing ? (
-                      <input 
-                        className="text-[14px] font-bold text-text-dark bg-gray-50 rounded-lg px-2 py-1 outline-none w-full"
-                        value={editForm.phone}
-                        onChange={e => setEditForm({...editForm, phone: e.target.value})}
-                      />
-                    ) : (
-                      <p className="text-[14px] font-bold text-text-dark">{user.phone || 'NO PHONE LINKED'}</p>
-                    )}
-                  </div>
-                </div>
-                <button className="w-10 h-10 flex items-center justify-center text-gray-300">
-                  <span className="material-symbols-outlined text-[20px]">call</span>
-                </button>
-              </div>
-
-              <div className="p-5 flex items-start gap-4">
-                <span className="material-symbols-outlined text-red-500 mt-1">location_on</span>
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Location</p>
+              <div className="p-6 space-y-1">
+                <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Business Mobile</p>
+                <div className="flex items-center gap-3">
+                  <img src="https://flagcdn.com/w20/ae.png" className="w-5 h-4 object-cover rounded shadow-sm" alt="" />
                   {isEditing ? (
                     <input 
-                      className="text-[14px] font-bold text-text-dark bg-gray-50 rounded-lg px-2 py-1 outline-none w-full"
-                      value={editForm.locationName}
-                      onChange={e => setEditForm({...editForm, locationName: e.target.value})}
+                      className="text-[14px] font-bold text-text-dark bg-gray-50 rounded-xl px-4 py-2 outline-none w-full border-none focus:ring-1 focus:ring-primary shadow-inner"
+                      value={editForm.phone}
+                      onChange={e => setEditForm({...editForm, phone: e.target.value})}
                     />
                   ) : (
-                    <p className="text-[14px] font-bold text-text-dark leading-snug">{user.locationName || 'LOCATION NOT SET'}</p>
+                    <p className="text-[14px] font-bold text-text-dark">{user.phone || 'NOT SET'}</p>
                   )}
                 </div>
               </div>
 
-              <div className="p-5 space-y-4">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Services</p>
-                  {isEditing ? (
-                    <div className="relative mt-2">
-                      <select
-                        value={editForm.services[0] || ''}
-                        onChange={(e) => handleServiceChange(e.target.value)}
-                        className="w-full px-5 py-4 bg-gray-50 border-none rounded-2xl text-[14px] font-bold text-text-dark focus:ring-1 focus:ring-primary shadow-inner appearance-none outline-none"
-                      >
-                        <option value="" disabled>Select Core Service</option>
-                        {availableCategories.map(cat => (
-                          <option key={cat.id} value={cat.name}>{cat.name}</option>
-                        ))}
-                      </select>
-                      <span className="absolute right-5 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 pointer-events-none">expand_more</span>
-                    </div>
-                  ) : (
-                    <p className="text-[14px] font-bold text-text-dark">{editForm.services[0] || 'No primary service'}</p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Expertise Tags</p>
-                  {isEditing ? (
-                    <div className="space-y-3 pt-1">
-                      <div className="flex flex-wrap gap-2">
-                        {editForm.categories.map(tag => (
-                          <span key={tag} className="bg-primary/10 text-primary text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 border border-primary/5">
-                            {tag}
-                            <button onClick={() => removeTag(tag)} className="material-symbols-outlined text-[14px] font-black">close</button>
-                          </span>
-                        ))}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          className="flex-1 bg-gray-50 border-none rounded-lg px-3 py-2 text-xs font-medium focus:ring-1 focus:ring-primary outline-none shadow-inner"
-                          placeholder="Add new expertise..."
-                          value={newTag}
-                          onChange={e => setNewTag(e.target.value)}
-                          onKeyPress={e => e.key === 'Enter' && addTag()}
-                        />
-                        <button onClick={addTag} className="w-9 h-9 bg-primary text-white rounded-lg flex items-center justify-center shadow-sm active:scale-95">
-                          <span className="material-symbols-outlined text-lg">add</span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {editForm.categories.length > 0 ? editForm.categories.map(cat => (
-                        <span key={cat} className="bg-gray-50 border border-gray-100 text-[10px] font-bold text-text-dark px-3 py-1.5 rounded-lg">{cat}</span>
-                      )) : <p className="text-[11px] text-gray-300 font-bold uppercase">No tags defined</p>}
-                    </div>
-                  )}
-                </div>
+              <div className="p-6 space-y-1">
+                <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Business Location</p>
+                {isEditing ? (
+                  <div className="bg-gray-50 rounded-xl px-4 py-2 shadow-inner border border-gray-100/50">
+                    <PlacesField 
+                      placeholder="Enter Business Location..."
+                      defaultValue={editForm.locationName}
+                      onPlaceChange={(res) => setEditForm(prev => ({ ...prev, locationName: res.name, lat: res.lat, lng: res.lng }))}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-[14px] font-bold text-text-dark leading-snug">{user.locationName || 'DUBAI, UAE'}</p>
+                )}
               </div>
 
-              <div className="p-5 space-y-2">
-                <div className="flex justify-between items-center">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">About Us</p>
-                  {!isEditing && (
-                    <button onClick={() => setIsEditing(true)} className="text-primary text-[10px] font-black uppercase tracking-widest hover:underline">Edit</button>
-                  )}
-                </div>
+              <div className="p-6 space-y-2">
+                <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Business Description</p>
                 {isEditing ? (
                   <textarea 
                     className="w-full bg-gray-50 border-none rounded-xl text-[13px] font-medium text-text-dark p-4 focus:ring-1 focus:ring-primary shadow-inner min-h-[120px] resize-none"
-                    placeholder="Describe this business..."
                     value={editForm.description}
                     onChange={e => setEditForm({...editForm, description: e.target.value})}
                   />
                 ) : (
-                  <p className="text-[13px] text-gray-500 font-medium leading-relaxed">
-                    {user.description || "No professional description provided by this entity."}
+                  <p className="text-[13px] text-gray-500 font-medium leading-relaxed italic border-l-4 border-gray-100 pl-4">
+                    {user.description || "No company overview provided."}
                   </p>
                 )}
               </div>
@@ -466,102 +414,42 @@ const ProviderDetails: React.FC<Props> = ({ adminUser }) => {
 
         <section className="space-y-4">
            <div className="flex items-center justify-between px-1">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#5B3D9D] text-[20px] font-bold">collections</span>
-                <h3 className="text-[15px] font-bold text-text-dark">Gallery ({editForm.gallery.length})</h3>
-              </div>
-              <button onClick={() => galleryInputRef.current?.click()} disabled={isUploading} className="text-[11px] font-black text-[#5B3D9D] uppercase tracking-widest">
-                {isUploading ? "Uploading..." : "ADD PHOTO"}
+              <h3 className="text-[13px] font-black text-gray-400 uppercase tracking-widest">Gallery Portfolio</h3>
+              <button onClick={() => galleryInputRef.current?.click()} disabled={isUploading} className="text-[10px] font-black text-primary uppercase tracking-widest flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px]">add_a_photo</span>
+                {isUploading ? "..." : "ADD"}
               </button>
               <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" onChange={handleAddPhoto} />
            </div>
-           <div className="bg-white rounded-[2.2rem] shadow-sm border border-white p-6">
+           <div className="bg-white rounded-[2.5rem] shadow-card border border-white p-6">
               <div className="grid grid-cols-3 gap-3">
                  {editForm.gallery.map((img, idx) => (
-                   <div key={idx} className="relative aspect-square rounded-xl overflow-hidden shadow-sm border border-gray-50 bg-gray-50 group">
+                   <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden shadow-sm border border-gray-50 bg-gray-50 group">
                       <img src={img} className="w-full h-full object-cover" alt="" />
-                      <div className="absolute inset-0 bg-black/20 flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => removePhoto(img)} className="w-7 h-7 bg-white rounded-full flex items-center justify-center text-red-500 shadow-sm">
-                           <span className="material-symbols-outlined text-[14px]">delete</span>
-                        </button>
-                      </div>
+                      <button onClick={() => removePhoto(img)} className="absolute top-1.5 right-1.5 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <span className="material-symbols-outlined text-[14px] font-black">delete</span>
+                      </button>
                    </div>
                  ))}
                  {editForm.gallery.length === 0 && (
-                   <div className="col-span-3 py-10 text-center opacity-30">
+                   <div className="col-span-3 py-10 text-center opacity-30 flex flex-col items-center">
                       <span className="material-symbols-outlined text-4xl mb-2">collections</span>
-                      <p className="text-[10px] font-black uppercase">Empty Portfolio</p>
+                      <p className="text-[9px] font-black uppercase tracking-widest">No portfolio photos</p>
                    </div>
                  )}
               </div>
            </div>
         </section>
 
-        <section className="space-y-4">
-           <div className="flex items-center gap-2 px-1">
-              <span className="material-symbols-outlined text-[#5B3D9D] text-[20px] font-bold">badge</span>
-              <h3 className="text-[15px] font-bold text-text-dark">Account Status</h3>
-           </div>
-           <div className="bg-white rounded-[2.2rem] shadow-sm border border-white p-6 space-y-8">
-              <div className="grid grid-cols-2 gap-y-8">
-                 <div className="space-y-1">
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Provider ID</p>
-                   <div className="flex items-center gap-1">
-                      <p className="text-[14px] font-bold text-text-dark">#PR-{user.id.substring(0, 6).toUpperCase()}</p>
-                      <button onClick={() => { navigator.clipboard.writeText(user.id); showToast("Copied ID!", "success"); }} className="material-symbols-outlined text-[14px] text-gray-300">content_copy</button>
-                   </div>
-                 </div>
-                 <div className="space-y-1">
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Status</p>
-                   <p className={`text-[14px] font-bold ${user.isBlocked ? 'text-red-500' : 'text-[#8BC34A]'}`}>{user.isBlocked ? 'Suspended' : 'Verified Active'}</p>
-                 </div>
-                 <div className="space-y-1">
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Member Since</p>
-                   <p className="text-[14px] font-bold text-text-dark">{user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}</p>
-                 </div>
-                 <div className="space-y-1">
-                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Last Sync</p>
-                   <p className="text-[14px] font-bold text-text-dark">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'NEVER'} GST</p>
-                 </div>
-              </div>
-           </div>
-        </section>
-
-        <section className="space-y-4">
-           <div className="flex items-center justify-between px-1">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#5B3D9D] text-[20px] font-bold">history</span>
-                <h3 className="text-[15px] font-bold text-text-dark">Recent Logs</h3>
-              </div>
-              <button className="text-[11px] font-bold text-primary uppercase tracking-wider">Export</button>
-           </div>
-           
-           <div className="bg-white rounded-[2.2rem] shadow-sm border border-white p-6 space-y-0">
-              {activityLog.length > 0 ? activityLog.map((log, idx) => (
-                <div key={idx} className="flex gap-4 relative pb-8 group last:pb-2">
-                   {idx !== activityLog.length - 1 && <div className="absolute left-[7px] top-6 bottom-[-8px] w-[2px] bg-gray-50 group-last:hidden"></div>}
-                   <div className={`w-4 h-4 rounded-full ${log.color} shrink-0 z-10 border-[3px] border-white shadow-sm mt-1 flex items-center justify-center`}>
-                      {log.title === 'Provider Login' && <div className="w-full h-full rounded-full border border-primary"></div>}
-                   </div>
-                   <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start mb-0.5">
-                        <h4 className="text-[14px] font-bold text-text-dark">{log.title}</h4>
-                        <span className="text-[10px] font-bold text-gray-300 uppercase">{log.timeStr || log.date}</span>
-                      </div>
-                      <p className="text-[12px] text-gray-400 font-medium leading-relaxed">{log.desc}</p>
-                   </div>
-                </div>
-              )) : <div className="py-6 text-center text-gray-300 text-[10px] font-bold uppercase tracking-widest">No activity found</div>}
-           </div>
-        </section>
-
-        <button 
-          onClick={handlePurge}
-          className="w-full py-5 bg-white border border-gray-100 text-red-500 rounded-2xl font-bold text-[13px] flex items-center justify-center gap-3 active:scale-[0.98] transition-all shadow-xs"
-        >
-          <span className="material-symbols-outlined text-[18px] font-black text-red-500">delete</span>
-          Purge Provider Record
-        </button>
+        <div className="pt-6 pb-12 space-y-4">
+          <button 
+            onClick={handlePurge}
+            className="w-full py-5 bg-white border border-gray-100 text-red-500 rounded-3xl font-black text-[12px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 active:scale-[0.98] transition-all shadow-sm"
+          >
+            <span className="material-symbols-outlined text-lg">delete_forever</span>
+            Purge Provider Record
+          </button>
+        </div>
       </main>
     </div>
   );

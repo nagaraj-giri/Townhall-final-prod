@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { User, RFQ } from '../../types';
+import { User, RFQ, UserRole } from '../../types';
 import { dataService } from '../services/dataService';
 import { useApp } from '../../App';
 import { PlacesField } from '../../Functions/placesfield';
+import { getAIConciergeSuggestions } from '../services/geminiService';
 
 interface CreateRFQProps {
   user: User;
@@ -21,6 +22,7 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
   const [coords, setCoords] = useState({ lat: 25.185, lng: 55.275 });
   const [service, setService] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAiThinking, setIsAiThinking] = useState(false);
   const [availableServices, setAvailableServices] = useState<string[]>([]);
 
   useEffect(() => {
@@ -34,38 +36,66 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
 
       if (initialQuery) {
         setTitle(initialQuery);
-      } else if (preSelected && names.includes(preSelected)) {
+      }
+      
+      if (preSelected && names.includes(preSelected)) {
         setService(preSelected);
-      } else if (names.length > 0) {
+      } else if (names.length > 0 && !service) {
         setService(names[0]);
       }
     };
     fetchData();
-  }, [location.state]);
+  }, [location.state, service]);
+
+  const handleAiOptimize = async () => {
+    const inputContent = description.trim() || title.trim();
+    if (!inputContent) {
+      showToast("Enter some details first", "info");
+      return;
+    }
+    
+    setIsAiThinking(true);
+    const suggestions = await getAIConciergeSuggestions(inputContent, locationName);
+    setIsAiThinking(false);
+    
+    if (suggestions) {
+      setTitle(suggestions.suggestedTitle);
+      setDescription(suggestions.suggestedDescription);
+      setService(suggestions.suggestedCategory);
+      showToast("AIRRA: Context Refined", "success");
+    } else {
+      showToast("AIRRA is currently busy", "error");
+    }
+  };
+
+  const isProfileComplete = !!(user.phone && user.nationality);
 
   const handleCreate = async () => {
-    if (!user.phone || !user.nationality) {
-      showToast("Please update your mobile and nationality in Profile", 'error');
-      setTimeout(() => navigate('/profile'), 1500);
+    if (!isProfileComplete) {
+      showToast("Missing Mobile/Nationality. Redirecting to Profile...", 'error');
+      setTimeout(() => navigate('/profile'), 1800);
       return;
     }
 
     if (!title.trim() || !description.trim() || !locationName) {
-      showToast("Please fill in all details", 'error');
+      showToast("Please complete all fields and select a valid district", 'error');
       return;
     }
     
     setIsSubmitting(true);
+    const rfqId = `rfq_${Date.now()}`;
+    const displayId = `#DXB-${Math.floor(1000 + Math.random() * 9000)}`;
+    
     const rfq: RFQ = {
-      id: `rfq_${Date.now()}`,
-      idDisplay: `#DXB-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: rfqId,
+      idDisplay: displayId,
       customerId: user.id,
       customerName: user.name,
       customerAvatar: user.avatar,
       title: title.trim(),
       description: description.trim(),
-      service, 
-      category: service, 
+      service: service || availableServices[0] || 'General Service', 
+      category: service || availableServices[0] || 'General Service', 
       locationName: locationName,
       lat: coords.lat,
       lng: coords.lng,
@@ -77,10 +107,46 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
 
     try {
       await dataService.saveRFQ(rfq);
-      showToast("Query broadcasted to UAE Experts", 'success');
+      
+      await dataService.createNotification(
+        user.id,
+        "🚀 Query Posted Successfully",
+        `Your request "${rfq.title}" is now live and AIRRA is searching for experts.`,
+        "SUCCESS",
+        UserRole.CUSTOMER,
+        `/rfq/${rfq.id}`
+      );
+
+      const allUsers = await dataService.getUsers();
+      const admins = allUsers.filter(u => u.role === UserRole.ADMIN);
+      for (const admin of admins) {
+        await dataService.createNotification(
+          admin.id,
+          "🚨 New Marketplace Query",
+          `${user.name} posted: "${rfq.title}" in ${locationName.split(',')[0]}`,
+          "URGENT",
+          UserRole.ADMIN,
+          `/rfq/${rfq.id}`
+        );
+      }
+
+      await dataService.triggerLeadMatchingNotifications(rfq);
+
+      await dataService.createAuditLog({
+        admin: user, 
+        title: `Marketplace Query Posted: ${displayId}`,
+        type: "QUERY_LIFECYCLE",
+        severity: "LOW",
+        icon: "radar",
+        iconBg: "bg-primary",
+        eventId: rfqId,
+        details: { service: rfq.service, location: rfq.locationName }
+      });
+
+      showToast("Query broadcasted successfully", 'success');
       setTimeout(() => navigate('/queries'), 800);
     } catch (err) {
-      showToast("Failed to post", "error");
+      showToast("Failed to post query. Check your connection.", "error");
       setIsSubmitting(false);
     }
   };
@@ -88,29 +154,41 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
   return (
     <div className="fixed inset-0 z-[2000] bg-black/40 backdrop-blur-sm flex flex-col justify-end">
       <div className="absolute inset-0" onClick={() => navigate(-1)}></div>
-      <div className="relative z-10 bg-[#FAF9F6] rounded-t-[3rem] w-full shadow-2xl animate-in slide-in-from-bottom duration-500 h-[94vh] flex flex-col overflow-hidden">
+      <div className="relative z-10 bg-white rounded-t-[3rem] w-full shadow-2xl animate-in slide-in-from-bottom duration-500 h-[94vh] flex flex-col overflow-hidden">
+        
         <header className="px-8 pt-8 pb-4 flex justify-between items-center shrink-0">
           <div>
-            <h1 className="text-xl font-[900] text-text-dark tracking-tight leading-none uppercase">Post Requirement</h1>
-            <p className="text-[9px] text-primary font-black uppercase tracking-[0.2em] mt-2">Verified UAE Network</p>
+            <h1 className="text-xl font-black text-text-dark tracking-tight uppercase">Post Requirement</h1>
+            <p className="text-[9px] text-primary font-black uppercase tracking-[0.2em] mt-2">AIRRA Intelligence Active</p>
           </div>
-          <button onClick={() => navigate(-1)} className="w-10 h-10 bg-white shadow-sm rounded-full flex items-center justify-center text-gray-400 active:scale-90 transition-all">
-            <span className="material-symbols-outlined font-bold">close</span>
+          <button onClick={() => navigate(-1)} className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 active:scale-90 transition-all">
+            <span className="material-symbols-outlined">close</span>
           </button>
         </header>
 
         <main className="flex-1 overflow-y-auto px-8 pb-10 space-y-6 no-scrollbar pt-4">
+          {!isProfileComplete && (
+            <div className="bg-red-50 border border-red-100 p-5 rounded-3xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+              <span className="material-symbols-outlined text-red-500 fill-1">report</span>
+              <div>
+                <p className="text-[11px] font-black text-red-600 uppercase tracking-tight">Identity Verification Required</p>
+                <p className="text-[10px] text-red-500/80 font-bold leading-relaxed mt-1">
+                  UAE regulations require a verified mobile and nationality to broadcast marketplace queries. 
+                  <button onClick={() => navigate('/profile')} className="ml-1 underline font-black text-red-600">Complete Profile</button>
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-6">
             <div className="space-y-2">
-              <div className="flex justify-between items-center px-1">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Requirement Title</label>
-              </div>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Requirement Title</label>
               <input 
                 type="text" 
-                placeholder="e.g. Setting up a Freezone Company" 
+                placeholder="What do you need help with?" 
                 value={title} 
                 onChange={e => setTitle(e.target.value)} 
-                className="w-full px-6 py-4.5 bg-white border border-gray-100 rounded-2xl text-[14px] font-bold text-text-dark focus:ring-1 focus:ring-primary shadow-sm placeholder-gray-300 transition-all" 
+                className="w-full px-6 py-4.5 bg-gray-50 border-none rounded-2xl text-[14px] font-bold text-text-dark focus:ring-1 focus:ring-primary shadow-inner placeholder-gray-300" 
               />
             </div>
 
@@ -120,20 +198,21 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
                 <select 
                   value={service} 
                   onChange={e => setService(e.target.value)} 
-                  className="w-full px-6 py-4.5 bg-white border border-gray-100 rounded-2xl text-[13px] font-bold text-text-dark focus:ring-1 focus:ring-primary shadow-sm appearance-none"
+                  className="w-full px-6 py-4.5 bg-gray-50 border-none rounded-2xl text-[13px] font-bold text-text-dark focus:ring-1 focus:ring-primary shadow-inner appearance-none"
                 >
+                  <option value="" disabled>Select Core Service</option>
                   {availableServices.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <span className="absolute right-5 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-300 pointer-events-none">expand_more</span>
+                <span className="absolute right-5 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-300 pointer-events-none font-black">expand_more</span>
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Precise Location (UAE)</label>
-              <div className="relative flex items-center bg-white border border-gray-100 rounded-2xl shadow-sm px-4 min-h-[58px] focus-within:ring-1 focus-within:ring-primary transition-all pointer-events-auto">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">UAE Operational District</label>
+              <div className="relative flex items-center bg-gray-50 rounded-2xl shadow-inner px-4 min-h-[58px] focus-within:ring-1 focus-within:ring-primary transition-all">
                 <span className="material-symbols-outlined text-accent-pink text-[22px] mr-2 shrink-0">location_on</span>
                 <PlacesField 
-                  placeholder="Select District (e.g. JLT)"
+                  placeholder="Select District (e.g. Business Bay)"
                   onPlaceChange={(res) => {
                     setLocationName(res.name);
                     setCoords({ lat: res.lat, lng: res.lng });
@@ -143,12 +222,26 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Context & Details</label>
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Context & Details</label>
+                <button 
+                  onClick={handleAiOptimize}
+                  disabled={isAiThinking}
+                  className="flex items-center gap-1.5 text-primary text-[10px] font-black uppercase tracking-tight active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {isAiThinking ? (
+                    <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
+                  )}
+                  AIRRA Professional Polish
+                </button>
+              </div>
               <textarea 
-                placeholder="Briefly describe what you need..." 
+                placeholder="Describe your specific needs for matching with the right expert..." 
                 value={description} 
                 onChange={e => setDescription(e.target.value)} 
-                className="w-full px-6 py-5 bg-white border border-gray-100 rounded-[2.2rem] text-[14px] font-medium text-text-dark focus:ring-1 focus:ring-primary shadow-sm min-h-[160px] resize-none placeholder-gray-300 leading-relaxed" 
+                className="w-full px-6 py-5 bg-gray-50 border-none rounded-[2.2rem] text-[14px] font-medium text-text-dark focus:ring-1 focus:ring-primary shadow-inner min-h-[160px] resize-none placeholder-gray-300 leading-relaxed" 
               />
             </div>
           </div>
@@ -157,13 +250,13 @@ const CreateRFQ: React.FC<CreateRFQProps> = ({ user }) => {
         <footer className="p-8 bg-white border-t border-gray-100 shrink-0">
           <button 
             onClick={handleCreate} 
-            disabled={isSubmitting || !description.trim() || !title.trim() || !locationName} 
-            className="w-full bg-primary text-white py-5 rounded-full font-black text-xs uppercase tracking-[0.2em] shadow-btn-glow flex items-center justify-center gap-3 active:scale-[0.98] transition-all disabled:opacity-50 disabled:scale-100"
+            disabled={isSubmitting || !description.trim() || !title.trim()} 
+            className={`w-full py-5 rounded-full font-black text-xs uppercase tracking-[0.2em] shadow-btn-glow flex items-center justify-center gap-3 active:scale-[0.98] transition-all disabled:opacity-50 ${isProfileComplete ? 'bg-primary text-white' : 'bg-gray-100 text-gray-400 shadow-none border border-gray-200'}`}
           >
             {isSubmitting ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : (
               <>
-                BROADCAST LIVE
-                <span className="material-symbols-outlined text-lg font-black">sensors</span>
+                {isProfileComplete ? 'STRATEGIC BROADCAST' : 'COMPLETE PROFILE TO POST'}
+                <span className="material-symbols-outlined text-lg">{isProfileComplete ? 'radar' : 'lock'}</span>
               </>
             )}
           </button>

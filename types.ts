@@ -15,6 +15,8 @@ export interface User {
   avatar: string;
   role: UserRole;
   isBlocked?: boolean;
+  isVerified?: boolean;
+  status?: string;
   createdAt?: string;
   lastLoginAt?: string;
   lastIP?: string;
@@ -37,6 +39,32 @@ export interface User {
   profileViews?: number;
 }
 
+export interface ProviderRequest {
+  id: string;
+  businessName: string;
+  locationName: string;
+  lat: number;
+  lng: number;
+  services: string[];
+  contactPerson: string;
+  role: string;
+  whatsapp: string;
+  email: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt: string;
+}
+
+export interface EmailTemplateOverride {
+  subject?: string;
+  html?: string;
+}
+
+export interface EmailConfig {
+  // scenario -> channel -> state
+  triggers: Record<string, { email: boolean; inApp: boolean }>;
+  templateOverrides?: Record<string, EmailTemplateOverride>;
+}
+
 export interface AuditLogEntry {
   id: string;
   type: string;
@@ -51,21 +79,7 @@ export interface AuditLogEntry {
   eventId: string;
   icon: string;
   iconBg: string;
-}
-
-export interface ProviderRequest {
-  id: string;
-  businessName: string;
-  locationName: string;
-  lat?: number;
-  lng?: number;
-  services: string[];
-  contactPerson: string;
-  role: string;
-  whatsapp: string;
-  email: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  createdAt: string;
+  details?: Record<string, any>;
 }
 
 export type RFQStatus = 'OPEN' | 'ACTIVE' | 'ACCEPTED' | 'COMPLETED' | 'CANCELED';
@@ -132,6 +146,7 @@ export interface ChatMessage {
   senderId: string;
   recipientId: string; 
   text: string;
+  imageUrl?: string;
   timestamp: string;
   status: 'read' | 'unread' | 'sent';
 }
@@ -156,14 +171,5 @@ declare global {
   var aistudio: AIStudio;
   interface Window {
     google: any;
-  }
-  namespace JSX {
-    interface IntrinsicElements {
-      'gmpx-place-picker': any;
-      'gmp-place-autocomplete': any;
-      'gmpx-place-picker-loader': any;
-      'gmp-api-loader': any;
-      [elemName: string]: any;
-    }
   }
 }

@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, UserRole, ServiceCategory } from '../../types';
+import { User, UserRole } from '../../types';
 import { dataService } from '../services/dataService';
 import { useApp } from '../../App';
 
@@ -13,165 +13,25 @@ interface ProfileProps {
 const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
   const navigate = useNavigate();
   const { showToast, unreadCount, toggleNotifications } = useApp();
-  const logoInputRef = useRef<HTMLInputElement>(null);
   const adminAvatarInputRef = useRef<HTMLInputElement>(null);
   
-  const [isSaving, setIsSaving] = useState(false);
-  const [isTestingEmail, setIsTestingEmail] = useState(false);
-  const [isEmailVerified, setIsEmailVerified] = useState(false);
-  const [emailLastError, setEmailLastError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'profile' | 'system'>('profile'); 
-  
-  const [isSiteOpen, setIsSiteOpen] = useState(false);
-  const [isServiceOpen, setIsServiceOpen] = useState(false);
-  const [isEmailOpen, setIsEmailOpen] = useState(true);
-
-  // URI Builder State - Updated with latest production credentials
-  const [builderProvider, setBuilderProvider] = useState<'GMAIL' | 'SENDGRID' | 'CUSTOM'>('GMAIL');
-  const [builderUser, setBuilderUser] = useState('fulltechsln@gmail.com');
-  const [builderPass, setBuilderPass] = useState('oocn omvs lzal cirt');
-  const [fromName, setFromName] = useState('Town Hall');
-
-  const [settings, setSettings] = useState<any>({ 
-    siteName: 'Town Hall UAE', 
-    logo: '', 
-    maintenanceMode: false, 
-    newRegistrations: true,
-    smtpUri: 'smtps://fulltechsln%40gmail.com:oocnomvslzalcirt@smtp.gmail.com:465',
-    emailCollection: 'emails',
-    defaultFrom: 'Town Hall <fulltechsln@gmail.com>',
-    emailLastVerified: null
-  });
-  const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [statsData, setStatsData] = useState({ customers: 0, providers: 0, rfqs: 0 });
+  const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      const [sets, cats, usrs, rfqs] = await Promise.all([
-        dataService.getSettings(),
-        dataService.getCategories(),
-        dataService.getUsers(),
-        dataService.getRFQs()
-      ]);
-      if (sets) {
-        setSettings({ ...settings, ...sets });
-        if (sets.emailLastVerified) setIsEmailVerified(true);
-      }
-      if (cats) setCategories(cats);
-      setStatsData({
-        customers: usrs.filter(u => u.role === UserRole.CUSTOMER).length,
-        providers: usrs.filter(u => u.role === UserRole.PROVIDER).length,
-        rfqs: rfqs.length
-      });
-    };
-    fetchData();
+    const unsubUsers = dataService.listenToUsers((usrs) => {
+      const customers = usrs.filter(u => u.role === UserRole.CUSTOMER).length;
+      const providers = usrs.filter(u => u.role === UserRole.PROVIDER).length;
+      setStatsData(prev => ({ ...prev, customers, providers }));
+    });
+
+    const unsubRfqs = dataService.listenToRFQs((rfqs) => {
+      setStatsData(prev => ({ ...prev, rfqs: rfqs.length }));
+      setLoadingStats(false);
+    });
+
+    return () => { unsubUsers(); unsubRfqs(); };
   }, []);
-
-  const isUriValid = useMemo(() => {
-    return settings.smtpUri && settings.smtpUri.startsWith('smtps://') && settings.smtpUri.includes('@');
-  }, [settings.smtpUri]);
-
-  const applyUriBuilder = () => {
-    if (!builderUser || !builderPass) {
-      showToast("Enter credentials first", "error");
-      return;
-    }
-    
-    const cleanUser = builderUser.trim().replace('@', '%40');
-    const cleanPass = builderPass.trim().replace(/\s+/g, '');
-    
-    let uri = '';
-    if (builderProvider === 'GMAIL') {
-      uri = `smtps://${cleanUser}:${cleanPass}@smtp.gmail.com:465`;
-    } else if (builderProvider === 'SENDGRID') {
-      uri = `smtps://apikey:${cleanPass}@smtp.sendgrid.net:465`;
-    }
-    
-    const defaultFrom = `${fromName} <${builderUser.trim()}>`;
-    
-    setSettings({ ...settings, smtpUri: uri, defaultFrom: defaultFrom });
-    showToast("Production parameters updated", "success");
-  };
-
-  const copyToClipboard = (text: string, label: string) => {
-    if (!text) return;
-    navigator.clipboard.writeText(text.trim());
-    showToast(`${label} Copied`, "success");
-  };
-
-  const handleSaveAll = async () => {
-    setIsSaving(true);
-    try {
-      await dataService.saveSettings(settings);
-      await dataService.createAuditLog({
-        admin: user,
-        title: "SMTP Gateway Finalized",
-        type: "SYSTEM_CONFIG",
-        severity: "MEDIUM",
-        icon: "alternate_email",
-        iconBg: "bg-primary"
-      });
-      showToast("Global configurations saved", 'success');
-    } catch (err: any) {
-      showToast("Error saving settings", 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleTestEmail = async () => {
-    setIsTestingEmail(true);
-    setEmailLastError(null);
-    showToast(`Initiating handshake for ${builderUser}...`, "info");
-    try {
-      await dataService.testEmailTrigger();
-      showToast("Handshake document created", "success");
-      
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        attempts++;
-        const delivery = await dataService.getLastEmailStatus();
-        if (delivery?.state === 'ERROR') {
-          setEmailLastError(delivery.error);
-          setIsEmailVerified(false);
-          clearInterval(poll);
-          setIsTestingEmail(false);
-        } else if (delivery?.state === 'SUCCESS') {
-          showToast("Live SMTP Verification Successful!", "success");
-          setIsEmailVerified(true);
-          const now = new Date().toISOString();
-          setSettings(prev => ({ ...prev, emailLastVerified: now }));
-          dataService.saveSettings({ ...settings, emailLastVerified: now });
-          clearInterval(poll);
-          setIsTestingEmail(false);
-        }
-        if (attempts > 12) {
-          clearInterval(poll);
-          setIsTestingEmail(false);
-          // Fix: Changed "warning" to "info" to match the defined ToastType: 'success' | 'error' | 'info'
-          showToast("Handshake timeout: Ensure Extension is active", "info");
-        }
-      }, 2500);
-
-    } catch (err: any) {
-      showToast(err.message || "Test dispatch failed", "error");
-      setIsTestingEmail(false);
-    }
-  };
-
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      try {
-        showToast("Uploading logo...", "info");
-        const url = await dataService.uploadImage(file, `system/logo_${Date.now()}`);
-        setSettings({ ...settings, logo: url });
-        showToast("Logo updated", "success");
-      } catch (err) {
-        showToast("Upload failed", "error");
-      }
-    }
-  };
 
   const handleAdminAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -190,187 +50,164 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-transparent pb-32">
-      <header className="px-8 pt-14 pb-6 flex items-center justify-between">
-        <h1 className="text-[14px] font-[900] text-text-dark uppercase tracking-[0.2em]">Command Center</h1>
+    <div className="flex flex-col h-screen bg-transparent relative">
+      {/* Header - Fixed Height & High Z-Index */}
+      <header className="px-6 pt-14 pb-6 flex items-center justify-between shrink-0 relative z-[40]">
+        <h1 className="text-[14px] uppercase tracking-[0.2em] text-text-dark font-black">Command Center</h1>
         <div className="flex items-center gap-3">
-          <button onClick={() => toggleNotifications(true)} className="relative w-11 h-11 bg-white rounded-2xl shadow-sm flex items-center justify-center border border-gray-100 active:scale-95 transition-transform">
-            <span className="material-symbols-outlined text-text-dark text-xl font-normal">notifications</span>
-            {unreadCount > 0 && <div className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-accent-pink rounded-full border-2 border-white shadow-sm"></div>}
-          </button>
           <button 
-            onClick={() => setActiveTab(activeTab === 'profile' ? 'system' : 'profile')}
-            className={`w-11 h-11 rounded-[1.2rem] shadow-soft border flex items-center justify-center transition-all ${activeTab === 'system' ? 'bg-primary text-white border-primary' : 'bg-white text-primary border-gray-100'}`}
+            type="button"
+            onClick={(e) => { e.stopPropagation(); toggleNotifications(true); }} 
+            className="relative w-11 h-11 bg-white rounded-2xl shadow-soft flex items-center justify-center border border-white active:scale-95 transition-transform cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[22px]">{activeTab === 'profile' ? 'settings' : 'person'}</span>
+            <span className="material-symbols-outlined text-text-dark text-2xl font-bold">notifications</span>
+            {unreadCount > 0 && <div className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-accent-pink rounded-full border-2 border-white shadow-sm"></div>}
           </button>
         </div>
       </header>
 
-      <main className="flex-1 space-y-8 overflow-y-auto no-scrollbar">
-        {activeTab === 'profile' ? (
-          <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="px-8 flex flex-col items-center">
-              <div className="relative group">
-                <div 
-                  onClick={() => adminAvatarInputRef.current?.click()}
-                  className="w-32 h-32 rounded-[2.8rem] border-[6px] border-white shadow-soft overflow-hidden bg-gray-100 flex items-center justify-center cursor-pointer transition-transform active:scale-95"
-                >
-                  <img src={user.avatar} className="w-full h-full object-cover" alt="Admin" />
-                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <span className="material-symbols-outlined text-white">photo_camera</span>
-                  </div>
-                </div>
-                <input type="file" ref={adminAvatarInputRef} className="hidden" accept="image/*" onChange={handleAdminAvatarUpload} />
+      {/* Main Content - Scrollable with padding for nav */}
+      <main className="flex-1 space-y-8 overflow-y-auto no-scrollbar pb-32 z-[10] relative">
+        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* Identity Section */}
+          <div className="px-6 flex flex-col items-center">
+            <div 
+              onClick={() => adminAvatarInputRef.current?.click()}
+              className="w-32 h-32 rounded-[2.8rem] bg-white p-1 shadow-soft overflow-hidden cursor-pointer relative group"
+            >
+              <img 
+                src={user.avatar} 
+                className="w-full h-full object-cover rounded-[2.5rem]" 
+                alt="Admin" 
+                onError={(e) => (e.currentTarget.src = 'https://ui-avatars.com/api/?name=Admin&background=5B3D9D&color=fff')}
+              />
+              <div className="absolute bottom-2 right-2 bg-primary w-8 h-8 rounded-full border-4 border-white flex items-center justify-center text-white shadow-md group-active:scale-90 transition-transform">
+                 <span className="material-symbols-outlined text-[18px]">edit</span>
               </div>
-              <h2 className="mt-6 text-xl font-black text-text-dark uppercase tracking-tight">{user.name}</h2>
-              <p className="text-[10px] font-bold text-primary uppercase tracking-[0.2em] mt-1">Platform Administrator</p>
+              <input type="file" ref={adminAvatarInputRef} className="hidden" accept="image/*" onChange={handleAdminAvatarUpload} />
             </div>
-
-            <div className="px-8 grid grid-cols-3 gap-4">
-              <div className="bg-white p-5 rounded-[2rem] shadow-soft border border-white text-center">
-                <p className="text-xl font-black text-text-dark">{statsData.customers}</p>
-                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Clients</p>
-              </div>
-              <div className="bg-white p-5 rounded-[2rem] shadow-soft border border-white text-center">
-                <p className="text-xl font-black text-text-dark">{statsData.providers}</p>
-                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Experts</p>
-              </div>
-              <div className="bg-white p-5 rounded-[2rem] shadow-soft border border-white text-center">
-                <p className="text-xl font-black text-text-dark">{statsData.rfqs}</p>
-                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1">Queries</p>
-              </div>
-            </div>
-
-            <div className="px-8 space-y-3 pb-8">
-               <button onClick={() => navigate('/admin/audit-log')} className="w-full bg-white p-5 rounded-[1.8rem] shadow-soft border border-white flex items-center justify-between group active:scale-[0.98] transition-all">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-indigo-50 text-indigo-500 rounded-xl flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[22px]">history_edu</span>
-                    </div>
-                    <span className="text-[13px] font-bold text-text-dark">Security Audit Logs</span>
-                  </div>
-                  <span className="material-symbols-outlined text-gray-300 group-hover:text-primary transition-colors">chevron_right</span>
-               </button>
-               <button onClick={() => navigate('/admin/categories')} className="w-full bg-white p-5 rounded-[1.8rem] shadow-soft border border-white flex items-center justify-between group active:scale-[0.98] transition-all">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-emerald-50 text-emerald-500 rounded-xl flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[22px]">category</span>
-                    </div>
-                    <span className="text-[13px] font-bold text-text-dark">Service Categories</span>
-                  </div>
-                  <span className="material-symbols-outlined text-gray-300 group-hover:text-primary transition-colors">chevron_right</span>
-               </button>
-               <button onClick={onLogout} className="w-full bg-white p-5 rounded-[1.8rem] shadow-soft border border-white flex items-center justify-between group active:scale-[0.98] transition-all">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-red-50 text-red-500 rounded-xl flex items-center justify-center">
-                      <span className="material-symbols-outlined text-[22px]">logout</span>
-                    </div>
-                    <span className="text-[13px] font-bold text-red-500">Sign Out Console</span>
-                  </div>
-                  <span className="material-symbols-outlined text-gray-200">lock</span>
-               </button>
+            <div className="mt-6 text-center">
+              <h2 className="text-[22px] text-text-dark font-[900] uppercase tracking-tight">{user.name}</h2>
+              <p className="text-[10px] font-black text-primary uppercase tracking-[0.2em] mt-1">Platform Administrator</p>
             </div>
           </div>
-        ) : (
-          <div className="px-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="space-y-6">
-              <section className="bg-white rounded-[2.5rem] p-8 shadow-card border border-white space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-[15px] font-bold text-text-dark">Global Gateway</h3>
-                  <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${isEmailVerified ? 'bg-accent-green/10 text-accent-green' : 'bg-red-50 text-red-400'}`}>
-                    {isEmailVerified ? 'Live' : 'Handshake Pending'}
-                  </div>
-                </div>
 
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">SMTP Provider</label>
-                    <div className="flex gap-2">
-                      {['GMAIL', 'SENDGRID'].map(p => (
-                        <button 
-                          key={p} 
-                          onClick={() => setBuilderProvider(p as any)}
-                          className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${builderProvider === p ? 'bg-primary text-white border-primary shadow-lg' : 'bg-gray-50 text-gray-400 border-gray-100'}`}
-                        >
-                          {p}
-                        </button>
-                      ))}
+          {/* Core Marketplace Management */}
+          <div className="px-6 space-y-4">
+             <h3 className="text-[11px] text-gray-400 font-black uppercase tracking-[0.2em] ml-2">Marketplace Control</h3>
+             <div className="bg-white rounded-[2.8rem] p-4 shadow-soft border border-white space-y-2 relative z-[20]">
+                <button 
+                  type="button"
+                  onClick={() => navigate('/admin/categories')} 
+                  className="w-full p-5 rounded-[2rem] flex items-center justify-between group active:bg-gray-50 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                    <div className="flex items-center gap-4 pointer-events-none">
+                      <div className="w-14 h-14 bg-indigo-50 text-primary rounded-2xl flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[32px]">category</span>
+                      </div>
+                      <div className="text-left">
+                        <h3 className="text-[15px] font-black text-text-dark uppercase tracking-tight">Manage Services</h3>
+                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Edit Categories & Icons</p>
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Username / Email</label>
-                    <input 
-                      className="w-full px-5 py-3.5 bg-gray-50 border-none rounded-2xl text-[13px] font-bold text-text-dark shadow-inner outline-none focus:ring-1 focus:ring-primary"
-                      value={builderUser}
-                      onChange={e => setBuilderUser(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">App Password</label>
-                    <input 
-                      type="password"
-                      className="w-full px-5 py-3.5 bg-gray-50 border-none rounded-2xl text-[13px] font-bold text-text-dark shadow-inner outline-none focus:ring-1 focus:ring-primary"
-                      value={builderPass}
-                      onChange={e => setBuilderPass(e.target.value)}
-                    />
-                  </div>
-
-                  <button 
-                    onClick={applyUriBuilder}
-                    className="w-full py-4 bg-gray-50 text-primary rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-sm active:bg-gray-100"
-                  >
-                    Sync Parameters
-                  </button>
-                </div>
-              </section>
-
-              <div className="flex gap-4">
-                <button 
-                  onClick={handleSaveAll}
-                  disabled={isSaving}
-                  className="flex-1 bg-primary text-white py-5 rounded-3xl font-black text-[11px] uppercase tracking-widest shadow-btn-glow active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {isSaving ? 'Saving...' : 'Deploy Global'}
+                    <span className="material-symbols-outlined text-gray-300 font-bold">chevron_right</span>
                 </button>
-                <button 
-                  onClick={handleTestEmail}
-                  disabled={isTestingEmail}
-                  className="flex-1 bg-white border border-gray-100 text-text-dark py-5 rounded-3xl font-black text-[11px] uppercase tracking-widest active:bg-gray-50 transition-all flex items-center justify-center gap-2"
-                >
-                  {isTestingEmail ? <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div> : <span className="material-symbols-outlined text-lg">bolt</span>}
-                  Test Verify
-                </button>
-              </div>
 
-              {emailLastError && (
-                <div className="bg-red-50 p-4 rounded-2xl border border-red-100 text-red-500 text-[10px] font-bold">
-                  ERROR: {emailLastError}
-                </div>
-              )}
-            </div>
+                <div className="h-[1px] bg-gray-50 mx-4"></div>
+
+                <button 
+                  type="button"
+                  onClick={() => navigate('/admin/site-settings')} 
+                  className="w-full p-5 rounded-[2rem] flex items-center justify-between group active:bg-gray-50 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                    <div className="flex items-center gap-4 pointer-events-none">
+                      <div className="w-14 h-14 bg-orange-50 text-orange-400 rounded-2xl flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[32px]">branding_watermark</span>
+                      </div>
+                      <div className="text-left">
+                        <h3 className="text-[15px] font-black text-text-dark uppercase tracking-tight">Site Branding</h3>
+                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Logo, Name & Colors</p>
+                      </div>
+                    </div>
+                    <span className="material-symbols-outlined text-gray-300 font-bold">chevron_right</span>
+                </button>
+             </div>
           </div>
-        )}
+
+          {/* System Operations */}
+          <div className="px-6 space-y-4">
+             <h3 className="text-[11px] text-gray-400 font-black uppercase tracking-[0.2em] ml-2">Integrity & Logs</h3>
+             <div className="bg-white rounded-[2.8rem] p-4 shadow-soft border border-white space-y-2 relative z-[20]">
+                <button 
+                  type="button"
+                  onClick={() => navigate('/admin/audit-log')} 
+                  className="w-full p-5 rounded-[2rem] flex items-center justify-between group active:bg-gray-50 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                    <div className="flex items-center gap-4 pointer-events-none">
+                      <div className="w-14 h-14 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[32px]">history_edu</span>
+                      </div>
+                      <div className="text-left">
+                        <h3 className="text-[15px] font-black text-text-dark uppercase tracking-tight">Audit Logs</h3>
+                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Security Event History</p>
+                      </div>
+                    </div>
+                    <span className="material-symbols-outlined text-gray-300 font-bold">chevron_right</span>
+                </button>
+
+                <div className="h-[1px] bg-gray-50 mx-4"></div>
+
+                <button 
+                  type="button"
+                  onClick={() => navigate('/admin/email-logic')} 
+                  className="w-full p-5 rounded-[2rem] flex items-center justify-between group active:bg-gray-50 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                    <div className="flex items-center gap-4 pointer-events-none">
+                      <div className="w-14 h-14 bg-accent-pink/5 text-accent-pink rounded-2xl flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[32px]">mail_lock</span>
+                      </div>
+                      <div className="text-left">
+                        <h3 className="text-[15px] font-black text-text-dark uppercase tracking-tight">Email Rules</h3>
+                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Triggers & Engagement</p>
+                      </div>
+                    </div>
+                    <span className="material-symbols-outlined text-gray-300 font-bold">chevron_right</span>
+                </button>
+             </div>
+          </div>
+          
+          <div className="px-6">
+            <button 
+              type="button"
+              onClick={onLogout} 
+              className="w-full bg-white/50 border-2 border-white p-6 rounded-[2.5rem] flex items-center justify-center gap-4 active:scale-[0.98] transition-all group shadow-soft cursor-pointer"
+            >
+                <span className="material-symbols-outlined text-red-500 group-active:scale-110 transition-transform font-bold">logout</span>
+                <h3 className="text-[13px] text-red-500 font-black uppercase tracking-[0.2em]">Sign Out Console</h3>
+            </button>
+          </div>
+        </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white/95 border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.06)] backdrop-blur-md">
-        <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all">
-          <div className="w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[26px] font-normal">grid_view</span></div>
-          <span className="text-[9px] uppercase tracking-[0.2em] font-normal">HOME</span>
+      {/* Navigation Footer - Ultra-High Z-Index */}
+      <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white/90 backdrop-blur-xl border-t border-border-light pb-10 pt-4 px-6 flex justify-around items-center z-[100] shadow-[0_-15px_40px_rgba(0,0,0,0.06)]">
+        <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all active:scale-95">
+          <div className="w-12 h-10 flex items-center justify-center"><span className="material-symbols-outlined text-[28px] font-normal">grid_view</span></div>
+          <span className="text-[9px] font-black uppercase tracking-widest">HOME</span>
         </button>
-        <button onClick={() => navigate('/admin/users')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-30 transition-all">
-          <div className="w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[26px] font-normal">group</span></div>
-          <span className="text-[9px] uppercase tracking-[0.2em] font-normal">USERS</span>
+        <button onClick={() => navigate('/admin/users')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all active:scale-95">
+          <div className="w-12 h-10 flex items-center justify-center"><span className="material-symbols-outlined text-[26px] font-normal">group</span></div>
+          <span className="text-[9px] font-black uppercase tracking-widest">USERS</span>
         </button>
-        <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-30 transition-all">
-          <div className="w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[26px] font-normal">format_list_bulleted</span></div>
-          <span className="text-[9px] uppercase tracking-[0.2em] font-normal">QUERIES</span>
+        <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all active:scale-95">
+          <div className="w-12 h-10 flex items-center justify-center"><span className="material-symbols-outlined text-[26px] font-normal">format_list_bulleted</span></div>
+          <span className="text-[9px] font-black uppercase tracking-widest">QUERIES</span>
         </button>
-        <button className="flex-1 flex flex-col items-center gap-1 text-primary">
-          <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[26px] font-normal">person</span></div>
-          <span className="text-[9px] uppercase tracking-[0.2em] font-normal">PROFILE</span>
+        <button className="flex-1 flex flex-col items-center gap-1.5 text-primary">
+          <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-xl">
+             <span className="material-symbols-outlined text-[28px] fill-1">person</span>
+          </div>
+          <span className="text-[9px] font-black uppercase tracking-widest">PROFILE</span>
         </button>
       </nav>
     </div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { dataService } from '../services/dataService';
@@ -41,20 +40,6 @@ const ProviderRequestDetail: React.FC<RequestDetailProps> = ({ adminUser }) => {
         iconBg: status === 'APPROVED' ? "bg-accent-green" : "bg-red-500",
         eventId: request.id
       });
-
-      // Integration with Template System: Provider Approval
-      if (status === 'APPROVED' && request.id) {
-        const { EmailDispatcher } = await import('../../AlertsEngine/email_template/EmailDispatcher');
-        // Since we don't have a linked User ID yet (application phase), 
-        // we normally resolve to UID after they sign up, 
-        // but the dispatcher can handle email directly if the dataService method supports it.
-        // For this implementation, we use the requested templated format.
-        await EmailDispatcher.send(
-          [request.id], // Passing application ID as temporary UID for the extension
-          'APPLICATION_APPROVED', 
-          { businessName: request.businessName }
-        );
-      }
 
       setRequest({ ...request, status });
       showToast(`Application ${status.toLowerCase()} successfully`, "success");

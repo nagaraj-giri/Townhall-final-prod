@@ -9,6 +9,7 @@ interface PlaceResult {
 
 interface PlacesFieldProps {
   placeholder?: string;
+  defaultValue?: string;
   onPlaceChange: (result: PlaceResult) => void;
   className?: string;
 }
@@ -18,6 +19,7 @@ interface PlacesFieldProps {
  */
 export const PlacesField: React.FC<PlacesFieldProps> = ({ 
   placeholder = "Search area in UAE...", 
+  defaultValue = "",
   onPlaceChange, 
   className = "" 
 }) => {
@@ -30,7 +32,8 @@ export const PlacesField: React.FC<PlacesFieldProps> = ({
 
     const options = {
       fields: ['geometry', 'name', 'formatted_address'],
-      componentRestrictions: { country: 'ae' }
+      componentRestrictions: { country: 'ae' },
+      types: ['geocode', 'establishment'] // geocode covers areas, regions, neighborhoods
     };
 
     const autocomplete = new placesLibrary.Autocomplete(inputRef.current, options);
@@ -70,7 +73,8 @@ export const PlacesField: React.FC<PlacesFieldProps> = ({
         ref={inputRef}
         type="text"
         placeholder={placeholder}
-        className="w-full bg-transparent border-none p-0 text-[14px] font-bold text-text-dark outline-none focus:ring-0 placeholder-gray-300"
+        defaultValue={defaultValue}
+        className="w-full bg-transparent border-none p-0 text-[14px] font-normal text-text-dark outline-none focus:ring-0 placeholder-gray-300"
       />
     </div>
   );
@@ -109,18 +113,15 @@ export const reverseGeocode = (lat: number, lng: number): Promise<string> => {
     }
     
     try {
-      // Fix: Access google through window to resolve TypeScript error 'Cannot find name google'
       const geocoder = new window.google.maps.Geocoder();
       geocoder.geocode({ location: { lat, lng } }, (results: any, status: any) => {
         if (status === 'OK' && results && results[0]) {
-          // Look for neighborhood or sublocality in the address components
           const neighborhood = results[0].address_components.find((c: any) => 
             c.types.includes('neighborhood') || c.types.includes('sublocality_level_1')
           );
           if (neighborhood) {
             resolve(`${neighborhood.long_name}, Dubai`);
           } else {
-            // Fallback to the first part of the formatted address
             resolve(results[0].formatted_address.split(',')[0] + ', Dubai');
           }
         } else {

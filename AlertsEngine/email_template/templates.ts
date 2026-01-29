@@ -1,135 +1,71 @@
-
 import { UserRole } from '../../types';
 
-export interface EmailTemplateData {
-  subject: string;
-  title: string;
-  mainText: string;
-  buttonLabel?: string;
-  buttonUrl?: string;
-  footerText?: string;
-  // Specific fields based on user request for "New User Signed Up" style
-  role?: string;
-  username?: string;
-  name?: string;
-  location?: string;
-  timestamp?: string;
+export interface EmailTemplateResult {
+  name: string;
+  recipientRole: UserRole | 'SYSTEM_ADMIN';
+  helperText: string;
+  data: {
+    Subject: string;
+    html: string;
+    buttonLabel?: string;
+    buttonUrl?: string;
+  };
 }
 
-const BASE_URL = "https://townhall.sbs/";
+// Export BASE_URL for usage in the global email dispatcher and other template engines
+export const BASE_URL = "https://townhall.sbs/";
+const COLORS = {
+  primary: '#5B3D9D',
+  secondary: '#FFD60A',
+  green: '#8BC34A',
+  pink: '#FF69B4',
+  text: '#333333',
+  light: '#888888',
+  bg: '#FAF9F6'
+};
 
+/**
+ * Town Hall UAE - Central Template Repository
+ * Filtered to retain ONLY Provider triggers as per updated strategy.
+ */
 export const EMAIL_TEMPLATES = {
-  // --- CUSTOMER USE CASES ---
-  WELCOME_CUSTOMER: (data: { name: string }) => ({
-    name: "Welcome to Town Hall",
+  // --- PROVIDER SCENARIOS (RETAINED) ---
+
+  NEW_LEAD: (data: { title: string, location: string, id: string }): EmailTemplateResult => ({
+    name: "Lead Discovery Alert",
+    recipientRole: UserRole.PROVIDER,
+    helperText: "High-priority alert sent to matching experts within the operational radius.",
     data: {
-      Subject: "Welcome to Town Hall UAE!",
-      name: data.name,
+      Subject: "🎯 New Opportunity: A lead matches your expertise",
       html: `
-        <h2 style="color: #5B3D9D;">Salam ${data.name.split(' ')[0]},</h2>
-        <p>Welcome to Dubai's premium service network. You can now post requirements, receive expert quotes, and manage projects all in one place.</p>
-        <p>Login to your dashboard to start your first discovery.</p>
+        <h2 style="color: ${COLORS.primary}; font-weight: 900; text-transform: uppercase; margin-bottom: 15px; text-align: center;">New Lead Found</h2>
+        <p style="color: ${COLORS.text}; line-height: 1.6;">A customer has just posted a request matching your expertise: <strong style="color: ${COLORS.primary};">${data.title}</strong>.</p>
+        <div style="background: ${COLORS.secondary}15; border: 1px solid ${COLORS.secondary}40; padding: 20px; border-radius: 20px; margin-top: 20px;">
+          <p style="margin: 0; color: ${COLORS.text}; font-weight: bold;">Location: ${data.location}</p>
+          <p style="margin: 5px 0 0 0; color: ${COLORS.light}; font-size: 12px; font-weight: bold; text-transform: uppercase;">Act fast to submit your proposal before the matching phase closes.</p>
+        </div>
       `,
-      buttonLabel: "Get Started",
-      buttonUrl: BASE_URL
+      buttonLabel: "Submit Bid",
+      buttonUrl: `${BASE_URL}#/rfq/${data.id}`
     }
   }),
 
-  QUERY_LIVE: (data: { id: string, title: string, location: string }) => ({
-    name: "Query Posted",
+  BID_WON: (data: { title: string, customerName: string }): EmailTemplateResult => ({
+    name: "Contract Award Notification",
+    recipientRole: UserRole.PROVIDER,
+    helperText: "The 'Golden Ticket' email sent when a client officially hires a provider.",
     data: {
-      Subject: `Confirmation: Your Query ${data.id} is Live`,
+      Subject: "🏆 Success! You have been hired",
       html: `
-        <p>Salam, your requirement for <strong>${data.title}</strong> has been broadcasted to verified experts in <strong>${data.location}</strong>.</p>
-        <p>You will be notified as soon as experts start bidding on your request.</p>
+        <div style="text-align: center; margin-bottom: 20px;">
+          <span style="font-size: 40px;">🏆</span>
+        </div>
+        <h2 style="color: ${COLORS.green}; font-weight: 900; text-transform: uppercase; margin-bottom: 15px; text-align: center;">Opportunity Secured</h2>
+        <p style="color: ${COLORS.text}; line-height: 1.6;">Great news! <strong style="color: ${COLORS.primary};">${data.customerName}</strong> has accepted your proposal for <strong>${data.title}</strong>.</p>
+        <p style="color: ${COLORS.light}; font-size: 14px;">A secure chat channel has been opened. Please communicate with the client to finalize the logistics.</p>
       `,
-      buttonLabel: "View Status",
-      buttonUrl: BASE_URL
-    }
-  }),
-
-  MATCH_STALE: (data: { id: string, title: string }) => ({
-    name: "Discovery Pulse Check",
-    data: {
-      Subject: `Update on your requirement: ${data.title}`,
-      html: `
-        <p>We noticed that your query <strong>${data.title}</strong> hasn't received matching bids in the last hour.</p>
-        <p>Try broadening your location or adding more specific details to attract more experts in our network.</p>
-      `,
-      buttonLabel: "Optimize Query",
-      buttonUrl: BASE_URL
-    }
-  }),
-
-  // --- PROVIDER USE CASES ---
-  APPLICATION_APPROVED: (data: { businessName: string }) => ({
-    name: "Provider Application Approved",
-    data: {
-      Subject: "Application Approved: Welcome to Town Hall UAE",
-      html: `
-        <h2 style="color: #5B3D9D;">Congratulations!</h2>
-        <p>Your application for <strong>${data.businessName}</strong> has been verified and approved by our team.</p>
-        <p>You can now log in to the Provider Portal to access live leads and manage your professional storefront.</p>
-      `,
-      buttonLabel: "Access Dashboard",
-      buttonUrl: BASE_URL
-    }
-  }),
-
-  BID_WON: (data: { title: string, customerName: string }) => ({
-    name: "Bid Accepted",
-    data: {
-      Subject: "🏆 Opportunity Secured: You've been Hired!",
-      html: `
-        <p>Great news! <strong>${data.customerName}</strong> has accepted your proposal for <strong>${data.title}</strong>.</p>
-        <p>A secure chat channel has been opened. Please communicate with the client to finalize the logistics.</p>
-      `,
-      buttonLabel: "Open Chat",
-      buttonUrl: BASE_URL
-    }
-  }),
-
-  // --- ADMIN & SECURITY USE CASES ---
-  NEW_USER_ADMIN: (data: { name: string, email: string, role: string, location: string }) => ({
-    name: "New User Signed Up",
-    data: {
-      Subject: "New User Signed up in TownHall",
-      role: data.role,
-      username: data.email,
-      name: data.name,
-      location: data.location,
-      timestamp: new Date().toLocaleString(),
-      html: `
-        <p><strong>Hi Admin,</strong></p>
-        <p>A new user has joined the platform:</p>
-        <ul>
-          <li><strong>Name:</strong> ${data.name}</li>
-          <li><strong>Email:</strong> ${data.email}</li>
-          <li><strong>Role:</strong> ${data.role}</li>
-          <li><strong>Location:</strong> ${data.location}</li>
-        </ul>
-        <p>Login to the management console to view more details.</p>
-      `,
-      buttonLabel: "Go to Admin Panel",
-      buttonUrl: BASE_URL
-    }
-  }),
-
-  IDENTITY_ALERT: (data: { name: string, ip: string, prevIP: string }) => ({
-    name: "Security Identity Alert",
-    data: {
-      Subject: "⚠️ SECURITY ALERT: Suspicious Login Detected",
-      html: `
-        <p><strong>Security Warning:</strong></p>
-        <p>User <strong>${data.name}</strong> has logged in from a significantly different IP address.</p>
-        <ul>
-          <li><strong>New IP:</strong> ${data.ip}</li>
-          <li><strong>Previous IP:</strong> ${data.prevIP}</li>
-        </ul>
-        <p>Please investigate this account for potential unauthorized access.</p>
-      `,
-      buttonLabel: "Audit User",
-      buttonUrl: BASE_URL
+      buttonLabel: "Open Secure Chat",
+      buttonUrl: `${BASE_URL}#/messages`
     }
   })
 };

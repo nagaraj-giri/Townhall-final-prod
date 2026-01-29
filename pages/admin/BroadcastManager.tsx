@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User } from '../../types';
@@ -11,7 +12,6 @@ const AdminBroadcastManager: React.FC<Props> = ({ user }) => {
   const { showToast } = useApp();
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
-  const [actionUrl, setActionUrl] = useState('');
   const [target, setTarget] = useState<'ALL' | 'CUSTOMER' | 'PROVIDER'>('ALL');
   const [isSending, setIsSending] = useState(false);
 
@@ -23,11 +23,11 @@ const AdminBroadcastManager: React.FC<Props> = ({ user }) => {
     if (window.confirm(`Broadcast this message to ${target === 'ALL' ? 'everyone' : target.toLowerCase() + 's'}?`)) {
       setIsSending(true);
       try {
-        await dataService.createBroadcast(title, message, target, actionUrl.trim() || '/');
+        // Redirection URL removed from UI, defaulting to platform root
+        await dataService.createBroadcast(title, message, target, '/');
         showToast("Broadcast sent successfully", "success");
         setTitle('');
         setMessage('');
-        setActionUrl('');
         setTimeout(() => navigate('/admin/broadcasts'), 1000);
       } catch (err) {
         showToast("Failed to send broadcast", "error");
@@ -100,16 +100,6 @@ const AdminBroadcastManager: React.FC<Props> = ({ user }) => {
                   onChange={e => setMessage(e.target.value)}
                   className="w-full px-6 py-5 bg-[#F9FAFB] rounded-[1.8rem] text-[13px] font-medium text-text-dark border-none focus:ring-1 focus:ring-primary shadow-inner outline-none min-h-[120px] resize-none leading-relaxed"
                   placeholder="Type your announcement here..."
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Redirection URL (Optional)</label>
-                <input 
-                  value={actionUrl}
-                  onChange={e => setActionUrl(e.target.value)}
-                  className="w-full px-6 py-4 bg-[#F9FAFB] rounded-2xl text-[14px] font-bold text-text-dark border-none focus:ring-1 focus:ring-primary shadow-inner outline-none"
-                  placeholder="e.g. /queries or https://example.com"
                 />
               </div>
            </div>

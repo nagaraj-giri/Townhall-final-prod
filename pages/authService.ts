@@ -1,5 +1,5 @@
+
 import { 
-  // Fix: Suppressed false-positive 'no exported member' error for auth in modular SDK
   // @ts-ignore
   signInWithEmailAndPassword, 
   // @ts-ignore
@@ -40,25 +40,10 @@ const captureSignupLocation = async () => {
 };
 
 const triggerNewSignupAlerts = async (user: User) => {
-  // Use Case: Integration with Template System (Welcome Email)
-  const { EmailDispatcher } = await import('../AlertsEngine/email_template/EmailDispatcher');
-  await EmailDispatcher.send([user.id], 'WELCOME_CUSTOMER', { name: user.name });
-
-  // Admin Alert: Integration with Template System (Admin Notification)
+  // ADMIN: In-App Alert (Bell & Toast kept)
   const allUsers = await dataService.getUsers();
   const admins = allUsers.filter(u => u.role === UserRole.ADMIN);
   
-  await EmailDispatcher.send(
-    admins.map(a => a.id),
-    'NEW_USER_ADMIN', 
-    { 
-      name: user.name, 
-      email: user.email, 
-      role: user.role, 
-      location: user.locationName || 'Unknown' 
-    }
-  );
-
   admins.forEach(admin => {
     dataService.createNotification(
       admin.id,
@@ -77,14 +62,7 @@ const checkSecurityAlert = async (user: User, currentIP: string) => {
   if (user.lastIP && user.lastIP !== currentIP) {
     const admins = (await dataService.getUsers()).filter(u => u.role === UserRole.ADMIN);
     
-    // Integration with Template System: Security Alert
-    const { EmailDispatcher } = await import('../AlertsEngine/email_template/EmailDispatcher');
-    await EmailDispatcher.send(
-      admins.map(a => a.id),
-      'IDENTITY_ALERT',
-      { name: user.name, ip: currentIP, prevIP: user.lastIP }
-    );
-
+    // ADMIN: In-App Security Alert (Bell & Toast kept)
     admins.forEach(admin => {
       dataService.createNotification(
         admin.id,

@@ -283,6 +283,10 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
         <button onClick={onLogout} className="w-full py-5 bg-white border border-red-50 text-red-500 font-normal text-[11px] uppercase tracking-[0.3em] rounded-3xl shadow-sm active:scale-95 transition-all mt-4">
           Sign Out Session
         </button>
+
+        <div className="text-center pt-4 opacity-20">
+           <p className="text-[9px] font-black uppercase tracking-widest">v1.1.0 - Production Build</p>
+        </div>
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white/95 backdrop-blur-md border-t border-gray-100 pb-10 pt-3 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.04)]">

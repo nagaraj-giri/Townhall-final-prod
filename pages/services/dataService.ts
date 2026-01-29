@@ -1,40 +1,8 @@
-import { 
-  // Fix: Suppressed false-positive 'no exported member' error for firestore in modular SDK
-  // @ts-ignore
-  collection, 
-  // @ts-ignore
-  doc, 
-  // @ts-ignore
-  getDoc, 
-  // @ts-ignore
-  getDocs, 
-  // @ts-ignore
-  setDoc, 
-  // @ts-ignore
-  updateDoc, 
-  // @ts-ignore
-  deleteDoc, 
-  // @ts-ignore
-  query, 
-  // @ts-ignore
-  where, 
-  // @ts-ignore
-  onSnapshot, 
-  // @ts-ignore
-  orderBy,
-  // @ts-ignore
-  writeBatch,
-  // @ts-ignore
-  increment,
-  // @ts-ignore
-  limit,
-  // @ts-ignore
-  addDoc
-} from "firebase/firestore";
-// Fix: Suppressed false-positive 'no exported member' error for Unsubscribe type
+
+// @ts-ignore
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, onSnapshot, orderBy, writeBatch, increment, limit, addDoc } from "firebase/firestore";
 // @ts-ignore
 import type { Unsubscribe } from "firebase/firestore";
-// Fix: Suppressed false-positive 'no exported member' error for storage in modular SDK
 // @ts-ignore
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage, isFirebaseConfigured } from "./firebase";
@@ -44,11 +12,14 @@ import {
   Quote, 
   Review, 
   AppNotification, 
-  ProviderRequest, 
   ServiceCategory, 
   UserRole,
-  AuditLogEntry
+  AuditLogEntry,
+  EmailConfig,
+  ProviderRequest 
 } from "../../types";
+import { EmailDispatcher } from "../../AlertsEngine/email_template/EmailDispatcher";
+import { calculateDistance } from "../../LeadEngine/LeadMatcher";
 
 const COLLECTIONS = {
   USERS: 'users',
@@ -56,13 +27,16 @@ const COLLECTIONS = {
   QUOTES: 'quotes',
   NOTIFS: 'notifications',
   CATS: 'categories',
-  BANNERS: 'banners',
-  SETTINGS: 'settings',
-  REVIEWS: 'reviews',
-  PROVIDER_REQUESTS: 'provider_requests',
-  EMAILS: 'emails', // Standard collection for Email Extension
+  EMAILS: 'emails', 
   AUDIT_LOGS: 'audit_logs',
-  BROADCASTS: 'broadcasts'
+  BROADCASTS: 'broadcasts',
+  PROVIDER_REQUESTS: 'provider_requests',
+  REVIEWS: 'reviews'
+};
+
+const SETTINGS_DOC_PATH = {
+  LOGIC: ['settings', 'system_logic'],
+  SITE: ['settings', 'site']
 };
 
 export const dataService = {
@@ -70,373 +44,144 @@ export const dataService = {
     if (!isFirebaseConfigured) return;
   },
 
-  // --- IDENTITY & ANALYTICS ---
-
-  logStorefrontView: async (providerId: string, viewerId: string) => {
-    if (providerId === viewerId) return;
+  /**
+   * AIRRA CORE: Index leads. This MUST complete before notifications fire.
+   */
+  indexLeadMatches: async (rfq: RFQ): Promise<number> => {
+    console.debug(`[AIRRA] Indexing leads for: ${rfq.id}`);
     try {
-      const providerRef = doc(db, COLLECTIONS.USERS, providerId);
-      await updateDoc(providerRef, {
-        profileViews: increment(1)
-      });
-      await dataService.createNotification(
-        providerId,
-        "👀 Storefront Viewed",
-        "A potential customer is currently viewing your profile and reviews.",
-        "INFO",
-        UserRole.PROVIDER
+      const q = query(
+        collection(db, COLLECTIONS.USERS), 
+        where('role', '==', UserRole.PROVIDER), 
+        where('services', 'array-contains', rfq.service)
       );
-    } catch (e) {}
-  },
-
-  deleteUser: async (id: string) => {
-    await deleteDoc(doc(db, COLLECTIONS.USERS, id));
-  },
-
-  // --- NOTIFICATION & EMAIL CORE ---
-
-  sendEmail: async (to: string, subject: string, bodyHtml: string) => {
-    try {
-      await addDoc(collection(db, COLLECTIONS.EMAILS), {
-        to: [to],
-        message: { subject, html: bodyHtml },
-        timestamp: new Date().toISOString()
-      });
-    } catch (e) {}
-  },
-
-  // Fix: New method for templated dispatch using the standard format requested
-  sendTemplatedEmail: async (payload: { toUids: string[], template: any }) => {
-    try {
-      // In a production setup, the Email extension uses 'toUids' to resolve email addresses
-      await addDoc(collection(db, COLLECTIONS.EMAILS), {
-        ...payload,
-        timestamp: new Date().toISOString()
-      });
-    } catch (e) {
-      console.error("Failed to enqueue templated email", e);
+      const snap = await getDocs(q);
+      const providers = snap.docs.map(d => ({ ...d.data(), id: d.id } as User));
+      const batch = writeBatch(db);
+      let count = 0;
+      
+      for (const p of providers) {
+        if (!p.location) continue;
+        const dist = calculateDistance(rfq.lat, rfq.lng, p.location.lat, p.location.lng);
+        // Hard system constraint: 15KM maximum global indexing
+        if (dist <= 15) {
+          const matchRef = doc(db, COLLECTIONS.RFQS, rfq.id, 'matches', p.id);
+          batch.set(matchRef, {
+            providerId: p.id, 
+            providerName: p.name, 
+            email: p.email, 
+            distance: dist, 
+            indexedAt: new Date().toISOString()
+          });
+          count++;
+        }
+      }
+      if (count > 0) {
+        await batch.commit();
+        console.debug(`[AIRRA] Successfully indexed ${count} potential matches.`);
+      }
+      return count;
+    } catch (err) { 
+      console.error("[AIRRA] Indexing Error:", err); 
+      return 0;
     }
   },
 
-  testEmailTrigger: async () => {
-    await addDoc(collection(db, COLLECTIONS.EMAILS), {
-      to: ['test@townhall.ae'],
-      message: { 
-        subject: 'SMTP Handshake Test', 
-        html: '<p>Testing connection to SMTP gateway.</p>' 
-      },
-      timestamp: new Date().toISOString()
-    });
+  /**
+   * AIRRA CORE: Dispatch signals.
+   */
+  triggerLeadMatchingNotifications: async (rfq: RFQ) => {
+    try {
+      const radius = rfq.searchRadius || 3;
+      const phaseLabel = radius <= 3 ? "Phase 1" : radius <= 8 ? "Phase 2" : "Phase 3";
+      
+      const config = await dataService.getEmailConfig();
+      const triggerConfig = config.triggers?.["NEW_LEAD"] || { email: true, inApp: true };
+
+      // Query the indexed matches for this specific phase radius
+      const matchSnap = await getDocs(collection(db, COLLECTIONS.RFQS, rfq.id, 'matches'));
+      const phaseMatched = matchSnap.docs
+        .map(d => d.data())
+        .filter(m => m.distance <= radius);
+      
+      if (phaseMatched.length === 0) {
+        console.debug(`[AIRRA] No matches found for ${phaseLabel} within ${radius}KM`);
+        return;
+      }
+
+      // 1. SYSTEM SIGNALS (Bell Tray + Ringtone Trigger)
+      if (triggerConfig.inApp) {
+        const batch = writeBatch(db);
+        const timestamp = new Date().toISOString();
+        phaseMatched.forEach(m => {
+          const notifId = `lead_${rfq.id.slice(-4)}_${radius}km_${m.providerId.slice(-4)}_${Date.now()}`;
+          batch.set(doc(db, COLLECTIONS.NOTIFS, notifId), {
+            id: notifId, userId: m.providerId, title: `🎯 Lead Found: ${phaseLabel}`,
+            message: `Lead match: "${rfq.title}" in ${rfq.locationName.split(',')[0]}.`,
+            type: "INFO", isRead: false, timestamp: timestamp,
+            targetRole: UserRole.PROVIDER, actionUrl: `/rfq/${rfq.id}`
+          });
+        });
+        await batch.commit();
+      }
+
+      // 2. ATOMIC PHASE EMAIL
+      if (triggerConfig.email) {
+        const emails = phaseMatched.map(m => m.email).filter(e => !!e);
+        if (emails.length > 0) {
+          await EmailDispatcher.sendBulkPhasedEmail(emails, {
+            title: rfq.title, location: rfq.locationName.split(',')[0], id: rfq.id, phaseLabel: phaseLabel
+          }, rfq.id);
+        }
+      }
+    } catch (err) { console.error("[AIRRA Dispatch] Critical Error:", err); }
   },
 
-  getLastEmailStatus: async (): Promise<any> => {
-    const q = query(collection(db, COLLECTIONS.EMAILS), orderBy('timestamp', 'desc'), limit(1));
-    const snap = await getDocs(q);
-    if (snap.empty) return null;
-    const data = snap.docs[0].data() as any;
-    return data.delivery || { state: 'PENDING' };
-  },
-
-  createNotification: async (userId: string, title: string, message: string, type: 'INFO' | 'SUCCESS' | 'WARNING' | 'URGENT', targetRole: UserRole, actionUrl?: string) => {
-    const id = `notif_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-    await setDoc(doc(db, COLLECTIONS.NOTIFS, id), {
-      id, userId, title, message, type, isRead: false, timestamp: new Date().toISOString(), targetRole, actionUrl
+  sendTemplatedEmail: async (payload: { to: string[], message: { subject: string, html: string }, metadata?: any }) => {
+    await addDoc(collection(db, COLLECTIONS.EMAILS), { 
+      ...payload, 
+      cc: ["nagaraj.giri@zohomail.app"],
+      delivery: { startTime: new Date(), state: 'PENDING' } 
     });
-  },
-
-  createBroadcast: async (title: string, message: string, target: 'ALL' | 'CUSTOMER' | 'PROVIDER', actionUrl: string) => {
-    const broadcastId = `bcast_${Date.now()}`;
-    const timestamp = new Date().toISOString();
-    
-    await setDoc(doc(db, COLLECTIONS.BROADCASTS, broadcastId), {
-      id: broadcastId,
-      title,
-      message,
-      targetRole: target,
-      actionUrl,
-      timestamp,
-      sentToCount: 0,
-      openedCount: 0
-    });
-
-    let userQuery;
-    if (target === 'ALL') {
-      userQuery = collection(db, COLLECTIONS.USERS);
-    } else {
-      userQuery = query(collection(db, COLLECTIONS.USERS), where('role', '==', target));
-    }
-    
-    const usersSnap = await getDocs(userQuery);
-    const batch = writeBatch(db);
-    
-    usersSnap.docs.forEach(uDoc => {
-      const notifId = `notif_bc_${broadcastId}_${uDoc.id}`;
-      const notifRef = doc(db, COLLECTIONS.NOTIFS, notifId);
-      const userData = uDoc.data() as any;
-      batch.set(notifRef, {
-        id: notifId,
-        userId: uDoc.id,
-        title,
-        message,
-        type: 'INFO',
-        isRead: false,
-        timestamp,
-        targetRole: userData.role,
-        actionUrl
-      });
-    });
-    
-    await updateDoc(doc(db, COLLECTIONS.BROADCASTS, broadcastId), {
-      sentToCount: usersSnap.size
-    });
-    
-    await batch.commit();
-  },
-
-  listenToBroadcasts: (callback: (history: any[]) => void): Unsubscribe => {
-    const q = query(collection(db, COLLECTIONS.BROADCASTS), orderBy('timestamp', 'desc'));
-    return onSnapshot(q, (s: any) => callback(s.docs.map((d: any) => ({ ...d.data(), id: d.id }))));
-  },
-
-  // --- WORKFLOW TRANSITIONS (RFQ Lifecycle) ---
-
-  getRFQById: async (id: string): Promise<RFQ | null> => {
-    const snap = await getDoc(doc(db, COLLECTIONS.RFQS, id));
-    return snap.exists() ? ({ ...snap.data() as any, id: snap.id } as RFQ) : null;
   },
 
   saveRFQ: async (rfq: RFQ) => {
     const rfqRef = doc(db, COLLECTIONS.RFQS, rfq.id);
     const snap = await getDoc(rfqRef);
     const isNew = !snap.exists();
-    
     await setDoc(rfqRef, rfq, { merge: true });
-
+    
+    // If it's a new post, run the AIRRA Lead Match immediately
     if (isNew) {
-      // Integration with Template System: Customer Acknowledge
-      const { EmailDispatcher } = await import('../../AlertsEngine/email_template/EmailDispatcher');
-      await EmailDispatcher.send(
-        [rfq.customerId], 
-        'QUERY_LIVE', 
-        { id: rfq.idDisplay, title: rfq.title, location: rfq.locationName }
-      );
-
-      // Admin Alert: New query posted
-      const admins = (await dataService.getUsers()).filter(u => u.role === UserRole.ADMIN);
-      await EmailDispatcher.send(
-        admins.map(a => a.id),
-        'NEW_USER_ADMIN', // Reuse style or extend for queries
-        { name: rfq.customerName || 'Customer', email: '---', role: 'RFQ_POSTED', location: rfq.locationName }
-      );
-
-      admins.forEach(a => {
-        dataService.createNotification(a.id, "🚀 New Query Posted", `Customer posted: ${rfq.title}`, "INFO", UserRole.ADMIN, `/rfq/${rfq.id}`);
-      });
+      await dataService.indexLeadMatches(rfq);
     }
+  },
+
+  getRFQs: async (): Promise<RFQ[]> => {
+    const snap = await getDocs(collection(db, COLLECTIONS.RFQS));
+    return snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as RFQ));
   },
 
   deleteRFQ: async (id: string) => {
     await deleteDoc(doc(db, COLLECTIONS.RFQS, id));
   },
 
-  updateRFQStatus: async (rfqId: string, status: RFQ['status'], actor: User) => {
-    const rfqRef = doc(db, COLLECTIONS.RFQS, rfqId);
-    const rfqSnap = await getDoc(rfqRef);
-    if (!rfqSnap.exists()) return;
-    const rfq = rfqSnap.data() as RFQ;
-
-    await updateDoc(rfqRef, { status });
-
-    await dataService.createAuditLog({
-      admin: actor,
-      title: `RFQ ${rfq.idDisplay} transitioned to ${status}`,
-      type: "WORKFLOW_TRANSITION",
-      severity: "LOW",
-      icon: "swap_horiz",
-      iconBg: "bg-blue-500",
-      eventId: rfqId
-    });
-
-    if (status === 'COMPLETED' || status === 'CANCELED') {
-      await dataService.createNotification(
-        rfq.customerId,
-        status === 'COMPLETED' ? "🎉 Project Finished" : "🚫 Query Canceled",
-        `Your query ${rfq.idDisplay} has been marked as ${status.toLowerCase()}.`,
-        status === 'COMPLETED' ? "SUCCESS" : "INFO",
-        UserRole.CUSTOMER
-      );
-    }
-
-    if (status === 'COMPLETED' && rfq.acceptedQuoteId) {
-      const quoteSnap = await getDoc(doc(db, COLLECTIONS.QUOTES, rfq.acceptedQuoteId));
-      if (quoteSnap.exists()) {
-        const quote = quoteSnap.data() as Quote;
-        await dataService.createNotification(
-          quote.providerId,
-          "✅ Client marked project as Completed",
-          `Well done! "${rfq.title}" is now finished. Check your ratings soon.`,
-          "SUCCESS",
-          UserRole.PROVIDER
-        );
-      }
-    }
-  },
-
-  // --- QUOTES & REVIEWS ---
-
-  getQuotes: async (): Promise<Quote[]> => {
-    const snap = await getDocs(collection(db, COLLECTIONS.QUOTES));
-    return snap.docs.map(doc => ({ ...doc.data() as any, id: doc.id } as Quote));
-  },
-
-  listenToQuotes: (callback: (quotes: Quote[]) => void): Unsubscribe => {
-    return onSnapshot(collection(db, COLLECTIONS.QUOTES), (s: any) => callback(s.docs.map((d: any) => ({ ...d.data() as any, id: d.id } as Quote))));
-  },
-
-  markQuoteAsAccepted: async (quoteId: string, rfqId: string) => {
-    const batch = writeBatch(db);
-    batch.update(doc(db, COLLECTIONS.QUOTES, quoteId), { status: 'ACCEPTED' });
-    batch.update(doc(db, COLLECTIONS.RFQS, rfqId), { status: 'ACCEPTED', acceptedQuoteId: quoteId });
-    await batch.commit();
-
-    const rfqSnap = await getDoc(doc(db, COLLECTIONS.RFQS, rfqId));
-    const quoteSnap = await getDoc(doc(db, COLLECTIONS.QUOTES, quoteId));
-    
-    if (rfqSnap.exists() && quoteSnap.exists()) {
-      const rfq = rfqSnap.data() as RFQ;
-      const quote = quoteSnap.data() as Quote;
-      
-      await dataService.createNotification(rfq.customerId, "🤝 Expert Hired", `You have accepted ${quote.providerName}'s bid. Opening secure chat...`, "SUCCESS", UserRole.CUSTOMER);
-      await dataService.createNotification(quote.providerId, "🏆 Bid Accepted!", `Great news! A client accepted your proposal for ${rfq.title}.`, "SUCCESS", UserRole.PROVIDER, `/chat/${rfq.customerId}`);
-
-      // Integration with Template System: Provider Win Notification
-      const { EmailDispatcher } = await import('../../AlertsEngine/email_template/EmailDispatcher');
-      await EmailDispatcher.send([quote.providerId], 'BID_WON', { title: rfq.title, customerName: rfq.customerName || 'A Customer' });
-    }
-  },
-
-  saveQuote: async (quote: Quote) => {
-    const batch = writeBatch(db);
-    const quoteRef = doc(db, COLLECTIONS.QUOTES, quote.id);
-    const rfqRef = doc(db, COLLECTIONS.RFQS, quote.rfqId);
-    
-    batch.set(quoteRef, quote, { merge: true });
-    batch.update(rfqRef, { quotesCount: increment(1), status: 'ACTIVE' });
-    await batch.commit();
-
-    const rfqSnap = await getDoc(rfqRef);
-    if (rfqSnap.exists()) {
-      const rfq = rfqSnap.data() as RFQ;
-      await dataService.createNotification(
-        rfq.customerId,
-        "💰 New Proposal Received",
-        `${quote.providerName} quoted AED ${quote.price} for your request.`,
-        "SUCCESS",
-        UserRole.CUSTOMER,
-        `/rfq/${rfq.id}`
-      );
-    }
-  },
-
-  getReviews: async (providerId: string): Promise<Review[]> => {
-    const q = query(collection(db, COLLECTIONS.REVIEWS), where('providerId', '==', providerId));
-    const snap = await getDocs(q);
-    return snap.docs.map(doc => ({ ...doc.data() as any, id: doc.id } as Review));
-  },
-
-  submitReview: async (review: Review, providerId: string) => {
-    await setDoc(doc(db, COLLECTIONS.REVIEWS, review.id), review);
-    
-    await dataService.createNotification(
-      providerId,
-      "⭐ Client Rated You",
-      `You received a ${review.rating}-star rating! View details in your storefront.`,
-      "SUCCESS",
-      UserRole.PROVIDER,
-      "/storefront"
-    );
-
-    const admins = (await dataService.getUsers()).filter(u => u.role === UserRole.ADMIN);
-    admins.forEach(a => {
-       dataService.createNotification(a.id, "📢 Review Posted", `Rating of ${review.rating} stars given to Provider ${providerId}`, "INFO", UserRole.ADMIN);
-    });
-  },
-
-  listenToReviewsByProvider: (providerId: string, callback: (reviews: Review[]) => void): Unsubscribe => {
-    const q = query(collection(db, COLLECTIONS.REVIEWS), where('providerId', '==', providerId), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (s: any) => callback(s.docs.map((d: any) => ({ ...d.data() as any, id: d.id } as Review))));
-  },
-
-  listenToAllReviews: (callback: (reviews: Review[]) => void): Unsubscribe => {
-    const q = query(collection(db, COLLECTIONS.REVIEWS), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (s: any) => callback(s.docs.map((d: any) => ({ ...d.data() as any, id: d.id } as Review))));
-  },
-
-  deleteReview: async (id: string) => {
-    await deleteDoc(doc(db, COLLECTIONS.REVIEWS, id));
-  },
-
-  // --- CORE DATA ACCESS ---
-
   getUserById: async (id: string): Promise<User | null> => {
     const snap = await getDoc(doc(db, COLLECTIONS.USERS, id));
-    return snap.exists() ? ({ ...snap.data() as any, id: snap.id } as User) : null;
+    return snap.exists() ? ({ ...snap.data(), id: snap.id } as User) : null;
   },
 
   listenToUserById: (id: string, callback: (user: User | null) => void): Unsubscribe => {
-    return onSnapshot(doc(db, COLLECTIONS.USERS, id), (s: any) => callback(s.exists() ? ({ ...s.data() as any, id: s.id } as User) : null));
+    return onSnapshot(doc(db, COLLECTIONS.USERS, id), (s) => callback(s.exists() ? ({ ...s.data(), id: s.id } as User) : null));
   },
 
-  saveUser: async (user: User) => {
-    await setDoc(doc(db, COLLECTIONS.USERS, user.id), user, { merge: true });
-  },
-
-  getUsers: async (): Promise<User[]> => {
-    const snap = await getDocs(collection(db, COLLECTIONS.USERS));
-    return snap.docs.map(doc => ({ ...doc.data() as any, id: doc.id } as User));
-  },
-
-  listenToUsers: (callback: (users: User[]) => void): Unsubscribe => {
-    return onSnapshot(collection(db, COLLECTIONS.USERS), (s: any) => callback(s.docs.map((d: any) => ({ ...d.data() as any, id: d.id } as User))));
-  },
-
-  getRFQs: async (): Promise<RFQ[]> => {
-    const q = query(collection(db, COLLECTIONS.RFQS), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map(doc => ({ ...doc.data() as any, id: doc.id } as RFQ));
-  },
-
-  listenToRFQs: (callback: (rfqs: RFQ[]) => void): Unsubscribe => {
-    const q = query(collection(db, COLLECTIONS.RFQS), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (s: any) => callback(s.docs.map((d: any) => ({ ...d.data() as any, id: d.id } as RFQ))));
-  },
-
-  listenToRFQById: (id: string, callback: (rfq: RFQ | null) => void): Unsubscribe => {
-    return onSnapshot(doc(db, COLLECTIONS.RFQS, id), (s: any) => callback(s.exists() ? ({ ...s.data() as any, id: s.id } as RFQ) : null));
-  },
-
-  listenToRFQMatches: (rfqId: string, callback: (matches: any[]) => void): Unsubscribe => {
-    return onSnapshot(collection(db, COLLECTIONS.RFQS, rfqId, 'matches'), (s: any) => callback(s.docs.map((d: any) => ({ ...d.data() as any, id: d.id }))));
-  },
-
-  getQuotesByRFQ: async (rfqId: string): Promise<Quote[]> => {
-    const q = query(collection(db, COLLECTIONS.QUOTES), where('rfqId', '==', rfqId));
-    const snap = await getDocs(q);
-    return snap.docs.map(doc => ({ ...doc.data() as any, id: doc.id } as Quote));
-  },
-
-  listenToQuotesByRFQ: (rfqId: string, callback: (quotes: Quote[]) => void): Unsubscribe => {
-    const q = query(collection(db, COLLECTIONS.QUOTES), where('rfqId', '==', rfqId), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (s: any) => callback(s.docs.map((d: any) => ({ ...d.data() as any, id: d.id } as Quote))));
+  deleteUser: async (id: string) => {
+    await deleteDoc(doc(db, COLLECTIONS.USERS, id));
   },
 
   listenToNotifications: (userId: string, callback: (notifs: AppNotification[]) => void): Unsubscribe => {
-    const q = query(collection(db, COLLECTIONS.NOTIFS), where('userId', '==', userId), orderBy('timestamp', 'desc'));
-    return onSnapshot(q, (s: any) => callback(s.docs.map((d: any) => ({ ...d.data() as any, id: d.id } as AppNotification))));
-  },
-
-  markNotificationAsRead: async (id: string) => {
-    await updateDoc(doc(db, COLLECTIONS.NOTIFS, id), { isRead: true });
+    const q = query(collection(db, COLLECTIONS.NOTIFS), where('userId', '==', userId), orderBy('timestamp', 'desc'), limit(50));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as AppNotification))));
   },
 
   markAllNotificationsAsRead: async (userId: string) => {
@@ -447,47 +192,84 @@ export const dataService = {
     await batch.commit();
   },
 
+  markNotificationAsRead: async (id: string) => {
+    await updateDoc(doc(db, COLLECTIONS.NOTIFS, id), { isRead: true });
+  },
+
+  createNotification: async (userId: string, title: string, message: string, type: 'INFO' | 'SUCCESS' | 'WARNING' | 'URGENT', targetRole?: UserRole, actionUrl?: string) => {
+    const id = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    const notif: AppNotification = { id, userId, title, message, timestamp: new Date().toISOString(), isRead: false, type, targetRole, actionUrl };
+    await setDoc(doc(db, COLLECTIONS.NOTIFS, id), notif);
+  },
+
+  getUsers: async (): Promise<User[]> => {
+    const snap = await getDocs(collection(db, COLLECTIONS.USERS));
+    return snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as User));
+  },
+
+  listenToUsers: (callback: (users: User[]) => void): Unsubscribe => {
+    return onSnapshot(collection(db, COLLECTIONS.USERS), (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as User))));
+  },
+
+  saveUser: async (user: User) => {
+    await setDoc(doc(db, COLLECTIONS.USERS, user.id), user, { merge: true });
+  },
+
   getCategories: async (): Promise<ServiceCategory[]> => {
     const snap = await getDocs(collection(db, COLLECTIONS.CATS));
-    return snap.docs.map(doc => ({ ...doc.data() as any, id: doc.id } as ServiceCategory));
+    return snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as ServiceCategory));
   },
 
   saveCategories: async (categories: ServiceCategory[]) => {
     const batch = writeBatch(db);
-    for (const cat of categories) {
-      batch.set(doc(db, COLLECTIONS.CATS, cat.id), cat, { merge: true });
-    }
+    categories.forEach(cat => batch.set(doc(db, COLLECTIONS.CATS, cat.id), cat, { merge: true }));
     await batch.commit();
   },
 
   listenToCategories: (callback: (cats: ServiceCategory[]) => void): Unsubscribe => {
-    return onSnapshot(collection(db, COLLECTIONS.CATS), (s: any) => callback(s.docs.map((d: any) => ({ ...d.data() as any, id: d.id } as ServiceCategory))));
+    return onSnapshot(collection(db, COLLECTIONS.CATS), (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as ServiceCategory))));
   },
 
-  getSettings: async (): Promise<any> => {
-    const snap = await getDoc(doc(db, COLLECTIONS.SETTINGS, 'global'));
-    return snap.exists() ? snap.data() : { siteName: 'Town Hall UAE' };
+  listenToRFQs: (callback: (rfqs: RFQ[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.RFQS), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as RFQ))));
   },
 
-  saveSettings: async (settings: any) => {
-    await setDoc(doc(db, COLLECTIONS.SETTINGS, 'global'), settings, { merge: true });
+  listenToRFQById: (id: string, callback: (rfq: RFQ | null) => void): Unsubscribe => {
+    return onSnapshot(doc(db, COLLECTIONS.RFQS, id), (s) => callback(s.exists() ? { ...s.data(), id: s.id } as RFQ : null));
   },
 
-  listenToProviderRequests: (callback: (requests: ProviderRequest[]) => void): Unsubscribe => {
-    return onSnapshot(collection(db, COLLECTIONS.PROVIDER_REQUESTS), (s: any) => callback(s.docs.map((d: any) => ({ ...d.data() as any, id: d.id } as ProviderRequest))));
+  listenToRFQMatches: (rfqId: string, callback: (matches: any[]) => void): Unsubscribe => {
+    return onSnapshot(collection(db, COLLECTIONS.RFQS, rfqId, 'matches'), (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id }))));
   },
 
-  getProviderRequestById: async (id: string): Promise<ProviderRequest | null> => {
-    const snap = await getDoc(doc(db, COLLECTIONS.PROVIDER_REQUESTS, id));
-    return snap.exists() ? ({ ...snap.data() as any, id: snap.id } as ProviderRequest) : null;
+  listenToQuotesByRFQ: (rfqId: string, callback: (quotes: Quote[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.QUOTES), where('rfqId', '==', rfqId), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as Quote))));
   },
 
-  saveProviderRequest: async (req: ProviderRequest) => {
-    await setDoc(doc(db, COLLECTIONS.PROVIDER_REQUESTS, req.id), req, { merge: true });
+  listenToQuotesByProvider: (providerId: string, callback: (quotes: Quote[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.QUOTES), where('providerId', '==', providerId), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as Quote))));
   },
 
-  updateProviderRequestStatus: async (id: string, status: 'APPROVED' | 'REJECTED') => {
-    await updateDoc(doc(db, COLLECTIONS.PROVIDER_REQUESTS, id), { status });
+  getQuotes: async (): Promise<Quote[]> => {
+    const snap = await getDocs(collection(db, COLLECTIONS.QUOTES));
+    return snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as Quote));
+  },
+
+  listenToQuotes: (callback: (quotes: Quote[]) => void): Unsubscribe => {
+    return onSnapshot(collection(db, COLLECTIONS.QUOTES), (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as Quote))));
+  },
+
+  getEmailConfig: async (): Promise<EmailConfig> => {
+    const snap = await getDoc(doc(db, ...SETTINGS_DOC_PATH.LOGIC));
+    if (snap.exists()) return snap.data() as EmailConfig;
+    return { triggers: { "NEW_LEAD": { email: true, inApp: true } } };
+  },
+
+  saveEmailConfig: async (config: EmailConfig) => {
+    await setDoc(doc(db, ...SETTINGS_DOC_PATH.LOGIC), config, { merge: true });
   },
 
   createAuditLog: async (params: any) => {
@@ -496,13 +278,31 @@ export const dataService = {
   },
 
   listenToAuditLogs: (callback: (logs: AuditLogEntry[]) => void, logLimit: number, startDate: string): Unsubscribe => {
-    const q = query(
-      collection(db, COLLECTIONS.AUDIT_LOGS),
-      where('timestamp', '>=', startDate),
-      orderBy('timestamp', 'desc'),
-      limit(logLimit)
-    );
-    return onSnapshot(q, (s: any) => callback(s.docs.map((d: any) => ({ ...d.data(), id: d.id } as AuditLogEntry))));
+    const q = query(collection(db, COLLECTIONS.AUDIT_LOGS), where('timestamp', '>=', startDate), orderBy('timestamp', 'desc'), limit(logLimit));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as AuditLogEntry))));
+  },
+
+  listenToBroadcasts: (callback: (broadcasts: any[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.BROADCASTS), orderBy('timestamp', 'desc'));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id }))));
+  },
+
+  createBroadcast: async (title: string, message: string, targetRole: 'ALL' | 'CUSTOMER' | 'PROVIDER', actionUrl: string) => {
+    const id = `broadcast_${Date.now()}`;
+    const broadcastData = { id, title, message, targetRole, actionUrl, timestamp: new Date().toISOString(), sentToCount: 0, openedCount: 0 };
+    await setDoc(doc(db, COLLECTIONS.BROADCASTS, id), broadcastData);
+    const users = await dataService.getUsers();
+    const batch = writeBatch(db);
+    let count = 0;
+    users.forEach(u => {
+      if (targetRole === 'ALL' || u.role === targetRole) {
+        const notifId = `notif_b_${id}_${u.id}`;
+        batch.set(doc(db, COLLECTIONS.NOTIFS, notifId), { id: notifId, userId: u.id, title, message, type: "INFO", isRead: false, timestamp: new Date().toISOString(), targetRole: u.role, actionUrl });
+        count++;
+      }
+    });
+    batch.update(doc(db, COLLECTIONS.BROADCASTS, id), { sentToCount: count });
+    await batch.commit();
   },
 
   uploadImage: async (file: File | Blob, path: string): Promise<string> => {
@@ -510,4 +310,79 @@ export const dataService = {
     await uploadBytes(storageRef, file);
     return await getDownloadURL(storageRef);
   },
+
+  saveQuote: async (quote: Quote) => {
+    const quoteRef = doc(db, COLLECTIONS.QUOTES, quote.id);
+    await setDoc(quoteRef, quote, { merge: true });
+    
+    const rfqRef = doc(db, COLLECTIONS.RFQS, quote.rfqId);
+    const rfqSnap = await getDoc(rfqRef);
+    if (rfqSnap.exists()) {
+      const rfq = rfqSnap.data() as RFQ;
+      const newStatus = (rfq.status === 'OPEN') ? 'ACTIVE' : rfq.status;
+      await updateDoc(rfqRef, { quotesCount: increment(1), status: newStatus });
+    }
+  },
+
+  markQuoteAsAccepted: async (quoteId: string, rfqId: string) => {
+    const batch = writeBatch(db);
+    batch.update(doc(db, COLLECTIONS.QUOTES, quoteId), { status: 'ACCEPTED' });
+    batch.update(doc(db, COLLECTIONS.RFQS, rfqId), { status: 'ACCEPTED', acceptedQuoteId: quoteId });
+    await batch.commit();
+  },
+
+  markRFQCompleted: async (rfqId: string) => {
+    await updateDoc(doc(db, COLLECTIONS.RFQS, rfqId), { status: 'COMPLETED' });
+  },
+
+  sendAIRRAInsights: async (rfqId: string, providerId: string, reasoning: string, score: number) => {
+    const matchRef = doc(db, COLLECTIONS.RFQS, rfqId, 'matches', providerId);
+    await updateDoc(matchRef, { aiReasoning: reasoning, relevancyScore: score });
+  },
+
+  getSettings: async (): Promise<any> => {
+    const snap = await getDoc(doc(db, ...SETTINGS_DOC_PATH.SITE));
+    return snap.exists() ? snap.data() : null;
+  },
+
+  saveSettings: async (settings: any) => {
+    await setDoc(doc(db, ...SETTINGS_DOC_PATH.SITE), settings, { merge: true });
+  },
+
+  getReviews: async (providerId: string): Promise<Review[]> => {
+    const q = query(collection(db, COLLECTIONS.REVIEWS), where('providerId', '==', providerId), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ ...d.data(), id: d.id } as Review));
+  },
+
+  listenToReviewsByProvider: (providerId: string, callback: (reviews: Review[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.REVIEWS), where('providerId', '==', providerId), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as Review))));
+  },
+
+  listenToAllReviews: (callback: (reviews: Review[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.REVIEWS), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as Review))));
+  },
+
+  deleteReview: async (id: string) => {
+    await deleteDoc(doc(db, COLLECTIONS.REVIEWS, id));
+  },
+
+  logStorefrontView: async (providerId: string, customerId: string) => {
+    await updateDoc(doc(db, COLLECTIONS.USERS, providerId), { profileViews: increment(1) });
+  },
+
+  saveProviderRequest: async (request: ProviderRequest) => {
+    await setDoc(doc(db, COLLECTIONS.PROVIDER_REQUESTS, request.id), request);
+  },
+
+  getProviderRequestById: async (id: string): Promise<ProviderRequest | null> => {
+    const snap = await getDoc(doc(db, COLLECTIONS.PROVIDER_REQUESTS, id));
+    return snap.exists() ? ({ ...snap.data(), id: snap.id } as ProviderRequest) : null;
+  },
+
+  updateProviderRequestStatus: async (id: string, status: 'APPROVED' | 'REJECTED') => {
+    await updateDoc(doc(db, COLLECTIONS.PROVIDER_REQUESTS, id), { status });
+  }
 };

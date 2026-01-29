@@ -1,20 +1,20 @@
-// Fix: Suppressed false-positive 'no exported member' error for app in modular SDK
+
 // @ts-ignore
 import { initializeApp, getApps, getApp } from "firebase/app";
-// Fix: Suppressed false-positive 'no exported member' error for auth in modular SDK
 // @ts-ignore
 import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "firebase/auth";
-// Fix: Suppressed false-positive 'no exported member' error for firestore in modular SDK
-// @ts-ignore
 import { 
+  // @ts-ignore
   initializeFirestore, 
+  // @ts-ignore
   persistentLocalCache, 
-  persistentMultipleTabManager 
+  // @ts-ignore
+  persistentMultipleTabManager,
+  // @ts-ignore
+  getFirestore
 } from "firebase/firestore";
-// Fix: Suppressed false-positive 'no exported member' error for storage in modular SDK
 // @ts-ignore
 import { getStorage } from "firebase/storage";
-// Fix: Suppressed false-positive 'no exported member' error for getFunctions in modular Firebase SDK
 // @ts-ignore
 import { getFunctions } from "firebase/functions";
 
@@ -28,27 +28,31 @@ const firebaseConfig = {
   measurementId: "G-EBS2R5RE23"
 };
 
+// Singleton pattern for Firebase App
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Initialization for Auth with explicit persistence to prevent credential loss
-export const auth = getAuth(app);
-setPersistence(auth, browserLocalPersistence).catch(() => {});
+// Safe Firestore initialization
+let dbInstance;
+try {
+  // Attempt standard initialization with UAE-optimized settings
+  dbInstance = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    }),
+    experimentalForceLongPolling: true
+  });
+} catch (e: any) {
+  // Fallback to getFirestore if already initialized (prevents "Service already exists" error)
+  dbInstance = getFirestore(app);
+}
 
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  }),
-  experimentalForceLongPolling: true
-});
+export const db = dbInstance;
+export const auth = getAuth(app);
+setPersistence(auth, browserLocalPersistence).catch(console.warn);
 
 export const storage = getStorage(app);
 export const functions = getFunctions(app, "us-central1");
 export const googleProvider = new GoogleAuthProvider();
-
-export async function initFirebase() {
-  console.debug("[Town Hall] Secure Services Ready.");
-  return Promise.resolve();
-}
 
 export { app };
 export const isFirebaseConfigured = !!firebaseConfig.apiKey;

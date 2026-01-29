@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User, RFQ, UserRole } from '../../types';
@@ -7,206 +6,299 @@ import { useApp } from '../../App';
 
 interface DashboardProps { user: User; }
 
-type FilterType = 'overall' | 'month' | 'custom';
-
 const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   const navigate = useNavigate();
   const { toggleNotifications, unreadCount } = useApp();
+  
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [allRfqs, setAllRfqs] = useState<RFQ[]>([]);
-  const [activeFilter, setActiveFilter] = useState<FilterType>('overall');
   const [isLoading, setIsLoading] = useState(true);
-  const [customRange, setCustomRange] = useState({ start: '', end: '' });
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('ALL TIME');
 
   useEffect(() => {
     const unsubUsers = dataService.listenToUsers(setAllUsers);
-    const unsubRfqs = dataService.listenToRFQs(setAllRfqs);
-    setIsLoading(false);
+    const unsubRfqs = dataService.listenToRFQs((rfqs) => {
+      setAllRfqs(rfqs);
+      setIsLoading(false);
+    });
     return () => { unsubUsers(); unsubRfqs(); };
   }, []);
 
-  const staleQueriesCount = useMemo(() => {
-    const twelveHrsMs = 12 * 60 * 60 * 1000;
-    return allRfqs.filter(r => 
-      (r.status === 'OPEN' || r.status === 'ACTIVE') && 
-      (Date.now() - new Date(r.createdAt).getTime()) > twelveHrsMs
-    ).length;
-  }, [allRfqs]);
-
-  const filteredSets = useMemo(() => {
-    const now = new Date();
+  const stats = useMemo(() => {
+    const customers = allUsers.filter(u => u.role === UserRole.CUSTOMER);
+    const providers = allUsers.filter(u => u.role === UserRole.PROVIDER);
     
-    if (activeFilter === 'overall') {
-      const allDates = [...allUsers, ...allRfqs].map(x => new Date(x.createdAt || '').getTime()).filter(t => !isNaN(t));
-      const minDate = allDates.length > 0 ? Math.min(...allDates) : now.getTime();
-      const diffMs = now.getTime() - minDate;
-      return {
-        users: allUsers,
-        rfqs: allRfqs,
-        rangeDays: Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)))
-      };
-    }
-
-    let startDate: Date;
-    if (activeFilter === 'month') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    } else if (activeFilter === 'custom' && customRange.start && customRange.end) {
-      startDate = new Date(customRange.start);
-      const endDate = new Date(customRange.end);
-      endDate.setHours(23, 59, 59, 999);
-      return {
-        users: allUsers.filter(u => {
-          const d = new Date(u.createdAt || '');
-          return d >= startDate && d <= endDate;
-        }),
-        rfqs: allRfqs.filter(r => {
-          const d = new Date(r.createdAt || '');
-          return d >= startDate && d <= endDate;
-        }),
-        rangeDays: Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
-      };
-    } else {
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-    }
+    const openCount = allRfqs.filter(r => r.status === 'OPEN').length;
+    const activeCount = allRfqs.filter(r => r.status === 'ACTIVE').length;
+    const acceptedCount = allRfqs.filter(r => r.status === 'ACCEPTED').length;
+    const completedCount = allRfqs.filter(r => r.status === 'COMPLETED').length;
+    const canceledCount = allRfqs.filter(r => r.status === 'CANCELED').length;
+    
+    const total = allRfqs.length || 1; 
+    const conversionRate = Math.round(((acceptedCount + completedCount) / total) * 100);
 
     return {
-      users: allUsers.filter(u => new Date(u.createdAt || '') >= startDate),
-      rfqs: allRfqs.filter(r => new Date(r.createdAt || '') >= startDate),
-      rangeDays: activeFilter === 'month' ? 30 : 365
+      customersCount: customers.length,
+      providersCount: providers.length,
+      totalQueries: allRfqs.length,
+      openQueries: openCount,
+      breakdown: {
+        open: openCount,
+        active: activeCount,
+        accepted: acceptedCount,
+        completed: completedCount,
+        expired: canceledCount
+      },
+      conversion: conversionRate,
+      activeUsers: allUsers.filter(u => {
+        if (!u.lastLoginAt) return false;
+        const lastLogin = new Date(u.lastLoginAt).getTime();
+        return (Date.now() - lastLogin) < (24 * 60 * 60 * 1000);
+      }).length
     };
-  }, [allUsers, allRfqs, activeFilter, customRange]);
+  }, [allUsers, allRfqs]);
 
-  const metrics = useMemo(() => {
-    const { users, rfqs } = filteredSets;
-    const total = rfqs.length || 1;
-    
-    const getPct = (status: string) => Math.round((rfqs.filter(q => q.status === status).length / total) * 100);
-    const selectionRate = Math.round((rfqs.filter(r => r.status === 'ACCEPTED' || r.status === 'COMPLETED').length / total) * 100);
-
-    const generateTrend = (data: any[], dateField: string, buckets: number = 8) => {
-      if (data.length === 0) return Array(buckets).fill(0);
-      const points = Array(buckets).fill(0);
-      const now = new Date().getTime();
-      const rangeMs = filteredSets.rangeDays * 24 * 60 * 60 * 1000;
-      
-      data.forEach(item => {
-        const itemTime = new Date(item[dateField] || '').getTime();
-        const diff = now - itemTime;
-        const bucketIndex = Math.floor((diff / rangeMs) * buckets);
-        if (bucketIndex >= 0 && bucketIndex < buckets) {
-          points[(buckets - 1) - bucketIndex]++;
-        }
-      });
-      return points; 
-    };
-
-    return {
-      customersCount: users.filter(u => u.role === UserRole.CUSTOMER).length,
-      providersCount: users.filter(u => u.role === UserRole.PROVIDER).length,
-      queriesCount: rfqs.length,
-      openQueriesCount: rfqs.filter(r => r.status === 'OPEN' || r.status === 'ACTIVE').length,
-      conversionRate: selectionRate,
-      funnel: [
-        { label: 'OPEN', color: '#FFD60A', pct: getPct('OPEN') },
-        { label: 'ACTIVE', color: '#5B3D9D', pct: getPct('ACTIVE') },
-        { label: 'ACCEPTED', color: '#FF69B4', pct: getPct('ACCEPTED') },
-        { label: 'COMPLETED', color: '#8BC34A', pct: getPct('COMPLETED') }
-      ],
-      trends: {
-        active: { value: users.length, data: generateTrend(users, 'lastLoginAt') },
-        conversions: { value: rfqs.filter(r => r.status === 'COMPLETED').length, data: generateTrend(rfqs.filter(r => r.status === 'COMPLETED'), 'createdAt') }
-      }
-    };
-  }, [filteredSets]);
-
-  const Sparkline = ({ color, data }: { color: string, data: number[] }) => {
-    const max = Math.max(...data, 1);
-    const points = data.map((d, i) => `${(i / (data.length - 1)) * 100},${100 - (d / max) * 80}`).join(' ');
-    return (
-      <svg className="w-full h-10 overflow-visible mt-2" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <path d={`M 0,100 L ${points} L 100,100 Z`} fill={`${color}15`} />
-        <polyline fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" points={points} />
-      </svg>
-    );
-  };
-
-  if (isLoading) return <div className="flex items-center justify-center min-h-screen">Loading Analytics...</div>;
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#FAF9F6]">
+      <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  );
 
   return (
-    <div className="flex flex-col min-h-screen pb-32 bg-transparent">
-      <header className="px-6 pt-10 pb-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-[24px] font-black text-text-dark tracking-tight">Analytics Dashboard</h1>
-            <p className="text-[12px] text-gray-400 font-normal mt-0.5">Platform monitoring</p>
-          </div>
-          <button onClick={() => toggleNotifications(true)} className="relative w-11 h-11 rounded-full bg-white flex items-center justify-center shadow-card border border-gray-100 active:scale-95 transition-all">
-            <span className="material-symbols-outlined text-[24px] text-text-dark opacity-30 font-normal">notifications</span>
-            {unreadCount > 0 && <div className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-accent-pink rounded-full border-2 border-white shadow-sm"></div>}
+    <div className="flex flex-col min-h-screen pb-32 bg-[#FAF9F6]">
+      {/* Header */}
+      <header className="px-6 pt-12 pb-6 flex justify-between items-start">
+        <div className="space-y-1">
+          <h1 className="text-[20px] font-black text-text-dark tracking-tight leading-none uppercase">Good morning, Admin</h1>
+          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest opacity-60">Marketplace Insights Overview</p>
+        </div>
+        <button onClick={() => toggleNotifications(true)} className="relative w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-card border border-white active:scale-95 transition-all">
+          <span className="material-symbols-outlined text-text-dark text-2xl font-normal fill-0">notifications</span>
+          {unreadCount > 0 && <div className="absolute top-3 right-3 w-2.5 h-2.5 bg-accent-pink rounded-full border-2 border-white"></div>}
+        </button>
+      </header>
+
+      {/* Filters */}
+      <div className="px-6 mb-6">
+        <div className="bg-white/50 backdrop-blur-md rounded-full p-1 border border-white shadow-sm flex items-center justify-between">
+          {['ALL TIME', 'THIS MONTH'].map(f => (
+            <button 
+              key={f} 
+              onClick={() => setActiveFilter(f)}
+              className={`flex-1 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${activeFilter === f ? 'bg-primary text-white shadow-lg' : 'text-text-light'}`}
+            >
+              {f}
+            </button>
+          ))}
+          <button className="flex-1 py-2.5 text-[10px] font-black text-text-light uppercase tracking-widest flex items-center justify-center gap-1">
+            CUSTOM <span className="material-symbols-outlined text-sm">calendar_today</span>
+          </button>
+        </div>
+      </div>
+
+      <main className="px-6 space-y-6">
+        {/* Main Action Buttons */}
+        <div className="grid grid-cols-2 gap-4">
+          <button onClick={() => navigate('/admin/broadcast')} className="bg-primary p-6 rounded-[2rem] shadow-btn-glow flex items-center justify-center gap-3 active:scale-95 transition-all border border-white/10">
+            <span className="material-symbols-outlined text-white text-xl">campaign</span>
+            <span className="text-white text-[11px] font-black uppercase tracking-widest">Broadcast</span>
+          </button>
+          <button onClick={() => navigate('/admin/requests')} className="bg-white p-6 rounded-[2rem] shadow-card flex items-center justify-center gap-3 active:scale-95 transition-all border border-white">
+            <span className="material-symbols-outlined text-[#FFD60A] text-xl font-black">gavel</span>
+            <span className="text-text-dark text-[11px] font-black uppercase tracking-widest">Moderation</span>
           </button>
         </div>
 
-        <div className="flex gap-2 mt-6">
-          <button onClick={() => setActiveFilter('overall')} className={`px-5 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all ${activeFilter === 'overall' ? 'bg-primary text-white shadow-lg' : 'bg-white text-gray-400 border border-gray-100'}`}>Overall</button>
-          <button onClick={() => setActiveFilter('month')} className={`px-6 py-2.5 rounded-full text-[11px] font-bold uppercase tracking-wider transition-all ${activeFilter === 'month' ? 'bg-primary text-white shadow-lg' : 'bg-white text-gray-400 border border-gray-100'}`}>Month</button>
-        </div>
-      </header>
-
-      <main className="px-6 space-y-6 overflow-y-auto no-scrollbar pt-2">
-        {/* Stale Query oversight (Admin Use Case 5) */}
-        {staleQueriesCount > 0 && (
-          <div onClick={() => navigate('/queries')} className="bg-red-50 border border-red-100 rounded-3xl p-6 flex items-center justify-between cursor-pointer active:scale-95 transition-all">
-            <div className="flex items-center gap-4">
-               <div className="w-12 h-12 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center">
-                  <span className="material-symbols-outlined font-black">timer_off</span>
-               </div>
-               <div>
-                  <p className="text-[10px] font-black text-red-400 uppercase tracking-widest leading-none mb-1">Stale Health Check</p>
-                  <p className="text-sm font-bold text-red-600">{staleQueriesCount} queries open &gt; 12 hours</p>
-               </div>
-            </div>
-            <span className="material-symbols-outlined text-red-300">chevron_right</span>
-          </div>
-        )}
-
+        {/* Core KPI Cards */}
         <div className="grid grid-cols-2 gap-4">
-          {[
-            { label: 'Customers', value: metrics.customersCount, icon: 'group', color: '#5B3D9D' },
-            { label: 'Providers', value: metrics.providersCount, icon: 'storefront', color: '#FF9800' },
-            { label: 'Live Leads', value: metrics.openQueriesCount, icon: 'assignment', color: '#FFD60A' },
-            { label: 'Conversion', value: `${metrics.conversionRate}%`, icon: 'trending_up', color: '#8BC34A' },
-          ].map((kpi, idx) => (
-            <div key={idx} className="bg-white p-6 rounded-[2.2rem] shadow-card border border-white flex flex-col justify-between min-h-[140px]">
-              <div className="w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm" style={{ backgroundColor: `${kpi.color}10`, color: kpi.color }}><span className="material-symbols-outlined text-[24px] font-normal">{kpi.icon}</span></div>
-              <div><p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-0.5">{kpi.label}</p><p className="text-[26px] font-black text-text-dark leading-none tracking-tighter">{kpi.value}</p></div>
-            </div>
-          ))}
+          <div className="bg-white p-6 rounded-[2rem] shadow-soft border border-white space-y-3">
+             <div className="flex justify-between items-start">
+                <div className="w-9 h-9 bg-primary/5 rounded-xl flex items-center justify-center text-primary">
+                  <span className="material-symbols-outlined text-lg">group</span>
+                </div>
+                <span className="text-[8px] font-black text-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded-md uppercase">+12%</span>
+             </div>
+             <div>
+                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Customers</p>
+                <p className="text-2xl font-black text-text-dark tracking-tight">{stats.customersCount >= 1000 ? `${(stats.customersCount / 1000).toFixed(1)}k` : stats.customersCount}</p>
+             </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-[2rem] shadow-soft border border-white space-y-3">
+             <div className="flex justify-between items-start">
+                <div className="w-9 h-9 bg-secondary/10 rounded-xl flex items-center justify-center text-secondary">
+                  <span className="material-symbols-outlined text-lg">storefront</span>
+                </div>
+                <span className="text-[8px] font-black text-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded-md uppercase">+5%</span>
+             </div>
+             <div>
+                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Providers</p>
+                <p className="text-2xl font-black text-text-dark tracking-tight">{stats.providersCount}</p>
+             </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-[2rem] shadow-soft border border-white space-y-3">
+             <div className="flex justify-between items-start">
+                <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center text-blue-500">
+                  <span className="material-symbols-outlined text-lg">analytics</span>
+                </div>
+                <span className="text-[8px] font-black text-accent-green bg-accent-green/10 px-1.5 py-0.5 rounded-md uppercase">+8.4%</span>
+             </div>
+             <div>
+                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Total Queries</p>
+                <p className="text-2xl font-black text-text-dark tracking-tight">{stats.totalQueries.toLocaleString()}</p>
+             </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-[2rem] shadow-soft border border-white space-y-3 relative">
+             <div className="flex justify-between items-start">
+                <div className="w-9 h-9 bg-pink-50 rounded-xl flex items-center justify-center text-accent-pink">
+                  <span className="material-symbols-outlined text-lg">manage_search</span>
+                </div>
+                <span className="text-[7px] font-black text-white bg-accent-pink px-2 py-0.5 rounded-full uppercase tracking-tighter shadow-sm">Action</span>
+             </div>
+             <div>
+                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Open Queries</p>
+                <p className="text-2xl font-black text-text-dark tracking-tight">{stats.openQueries}</p>
+             </div>
+          </div>
         </div>
 
-        <section className="space-y-4 pb-12">
-          <div className="flex justify-between items-center px-1"><h3 className="text-[18px] font-bold text-text-dark tracking-tight">System Trends</h3></div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white p-6 rounded-[2.2rem] shadow-card border border-gray-100/50 flex flex-col justify-between min-h-[130px] overflow-hidden group">
-               <div><p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Active Users</p><p className="text-[20px] font-black text-text-dark tracking-tighter mt-1">{metrics.trends.active.value}</p></div>
-               <div className="transition-transform duration-500 group-hover:scale-105 origin-bottom"><Sparkline color="#8BC34A" data={metrics.trends.active.data} /></div>
-            </div>
-            <div className="bg-white p-6 rounded-[2.2rem] shadow-card border border-gray-100/50 flex flex-col justify-between min-h-[130px] overflow-hidden group">
-               <div><p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">Conversions</p><p className="text-[20px] font-black text-text-dark tracking-tighter mt-1">{metrics.trends.conversions.value}</p></div>
-               <div className="transition-transform duration-500 group-hover:scale-105 origin-bottom"><Sparkline color="#5B3D9D" data={metrics.trends.conversions.data} /></div>
-            </div>
+        {/* Funnel Donut Chart Card */}
+        <div className="bg-white rounded-[2.5rem] p-8 shadow-soft border border-white space-y-8">
+           <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-[14px] font-black text-text-dark uppercase tracking-tight">Leads Conversion</h3>
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1">Funnel breakdown of {stats.totalQueries.toLocaleString()} queries</p>
+              </div>
+              <button className="text-gray-300 material-symbols-outlined">more_horiz</button>
+           </div>
+
+           <div className="flex flex-col items-center py-4 relative">
+              <div className="relative w-48 h-48 flex items-center justify-center">
+                 <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="40" stroke="#f0f0f0" strokeWidth="12" fill="transparent" />
+                    <circle cx="50" cy="50" r="40" stroke="#FFD60A" strokeWidth="12" fill="transparent" strokeDasharray={`${Math.max(0, (stats.breakdown.open/stats.totalQueries)*251.2)} 251.2`} strokeDashoffset="0" />
+                    <circle cx="50" cy="50" r="40" stroke="#5B3D9D" strokeWidth="12" fill="transparent" strokeDasharray={`${Math.max(0, (stats.breakdown.active/stats.totalQueries)*251.2)} 251.2`} strokeDashoffset={`-${(stats.breakdown.open/stats.totalQueries)*251.2}`} />
+                    <circle cx="50" cy="50" r="40" stroke="#FF69B4" strokeWidth="12" fill="transparent" strokeDasharray={`${Math.max(0, (stats.breakdown.accepted/stats.totalQueries)*251.2)} 251.2`} strokeDashoffset={`-${((stats.breakdown.open + stats.breakdown.active)/stats.totalQueries)*251.2}`} />
+                    <circle cx="50" cy="50" r="40" stroke="#8BC34A" strokeWidth="12" fill="transparent" strokeDasharray={`${Math.max(0, (stats.breakdown.completed/stats.totalQueries)*251.2)} 251.2`} strokeDashoffset={`-${((stats.breakdown.open + stats.breakdown.active + stats.breakdown.accepted)/stats.totalQueries)*251.2}`} />
+                 </svg>
+                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <p className="text-3xl font-black text-text-dark tracking-tighter">{stats.conversion}%</p>
+                    <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Conversion</p>
+                 </div>
+              </div>
+           </div>
+
+           <div className="space-y-4 pt-2">
+              {[
+                { label: 'OPEN', color: 'bg-secondary', value: stats.breakdown.open, pct: Math.round((stats.breakdown.open/stats.totalQueries)*100) },
+                { label: 'ACTIVE', color: 'bg-primary', value: stats.breakdown.active, pct: Math.round((stats.breakdown.active/stats.totalQueries)*100) },
+                { label: 'ACCEPTED', color: 'bg-accent-pink', value: stats.breakdown.accepted, pct: Math.round((stats.breakdown.accepted/stats.totalQueries)*100) },
+                { label: 'COMPLETED', color: 'bg-accent-green', value: stats.breakdown.completed, pct: Math.round((stats.breakdown.completed/stats.totalQueries)*100) },
+                { label: 'EXPIRED', color: 'bg-[#94a3b8]', value: stats.breakdown.expired, pct: Math.round((stats.breakdown.expired/stats.totalQueries)*100) },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${item.color}`}></div>
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{item.label}</span>
+                   </div>
+                   <div className="flex items-center gap-4">
+                      <span className="text-[10px] font-black text-text-dark">{item.pct}%</span>
+                      <span className="text-[10px] font-bold text-gray-300 tabular-nums w-10 text-right">{item.value.toLocaleString()}</span>
+                   </div>
+                </div>
+              ))}
+           </div>
+        </div>
+
+        {/* Secondary Metrics Grid */}
+        <div className="grid grid-cols-2 gap-4 pb-12">
+          {/* Active Users */}
+          <div className="bg-white p-6 rounded-[2.2rem] shadow-soft border border-white space-y-4">
+             <div className="flex justify-between items-end">
+                <div>
+                   <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 opacity-60">Active Users</p>
+                   <p className="text-xl font-black text-text-dark tracking-tight">{stats.activeUsers.toLocaleString()}</p>
+                </div>
+                <span className="text-[8px] font-black text-accent-green uppercase">+12%</span>
+             </div>
+             <div className="h-8 w-full flex items-end gap-0.5">
+                <svg className="w-full h-full" viewBox="0 0 100 20">
+                  <path d="M0 15 Q 10 5, 20 12 T 40 8 T 60 18 T 80 5 T 100 12" fill="none" stroke="#8BC34A" strokeWidth="2" />
+                </svg>
+             </div>
           </div>
-        </section>
+
+          {/* Repeated Users */}
+          <div className="bg-white p-6 rounded-[2.2rem] shadow-soft border border-white space-y-4">
+             <div className="flex justify-between items-end">
+                <div>
+                   <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 opacity-60">Repeated Users</p>
+                   <p className="text-xl font-black text-text-dark tracking-tight">924</p>
+                </div>
+                <span className="text-[8px] font-black text-accent-green uppercase">+4%</span>
+             </div>
+             <div className="h-8 w-full">
+                <svg className="w-full h-full" viewBox="0 0 100 20">
+                  <path d="M0 18 L 20 15 L 40 16 L 60 12 L 80 10 L 100 8" fill="none" stroke="#5B3D9D" strokeWidth="2" />
+                </svg>
+             </div>
+          </div>
+
+          {/* Sessions */}
+          <div className="bg-white p-6 rounded-[2.2rem] shadow-soft border border-white space-y-4">
+             <div className="flex justify-between items-end">
+                <div>
+                   <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 opacity-60">Sessions</p>
+                   <p className="text-xl font-black text-text-dark tracking-tight">14.2k</p>
+                </div>
+                <span className="text-[8px] font-black text-gray-300 uppercase">0%</span>
+             </div>
+             <div className="h-8 w-full">
+                <svg className="w-full h-full" viewBox="0 0 100 20">
+                  <path d="M0 15 Q 20 18, 40 12 T 70 14 T 100 12" fill="none" stroke="#FFD60A" strokeWidth="2" />
+                </svg>
+             </div>
+          </div>
+
+          {/* Conversions */}
+          <div className="bg-white p-6 rounded-[2.2rem] shadow-soft border border-white space-y-4">
+             <div className="flex justify-between items-end">
+                <div>
+                   <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1 opacity-60">Conversions</p>
+                   <p className="text-xl font-black text-text-dark tracking-tight">{stats.breakdown.accepted + stats.breakdown.completed}</p>
+                </div>
+                <span className="text-[8px] font-black text-accent-green uppercase">+18%</span>
+             </div>
+             <div className="h-8 w-full">
+                <svg className="w-full h-full" viewBox="0 0 100 20">
+                  <path d="M0 18 Q 10 17, 30 18 T 60 14 T 80 12 T 100 5" fill="none" stroke="#FF69B4" strokeWidth="2" />
+                </svg>
+             </div>
+          </div>
+        </div>
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white/95 border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.06)]">
-        <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1.5 text-primary">
-          <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[26px] font-normal">grid_view</span></div>
-          <span className="text-[9px] uppercase tracking-widest font-bold">HOME</span>
+      <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white/95 backdrop-blur-md border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.06)]">
+        <button className="flex-1 flex flex-col items-center gap-1.5 text-primary">
+          <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-2xl">
+            <span className="material-symbols-outlined text-[28px] fill-1">grid_view</span>
+          </div>
+          <span className="text-[9px] font-bold uppercase tracking-widest">HOME</span>
         </button>
-        <button onClick={() => navigate('/admin/users')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-30"><span className="material-symbols-outlined text-[26px] font-normal">group</span><span className="text-[9px] uppercase tracking-widest font-bold">USERS</span></button>
-        <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-30"><span className="material-symbols-outlined text-[26px] font-normal">format_list_bulleted</span><span className="text-[9px] uppercase tracking-widest font-bold">QUERIES</span></button>
-        <button onClick={() => navigate('/profile')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-30"><span className="material-symbols-outlined text-[26px] font-normal">settings</span><span className="text-[9px] uppercase tracking-widest font-bold">SYSTEM</span></button>
+        <button onClick={() => navigate('/admin/users')} className="flex-1 flex flex-col items-center gap-1.5 text-gray-400">
+          <span className="material-symbols-outlined text-[28px]">group</span>
+          <span className="text-[9px] font-bold uppercase tracking-widest">USERS</span>
+        </button>
+        <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1.5 text-gray-400">
+          <span className="material-symbols-outlined text-[28px]">format_list_bulleted</span>
+          <span className="text-[9px] font-bold uppercase tracking-widest">QUERIES</span>
+        </button>
+        <button onClick={() => navigate('/profile')} className="flex-1 flex flex-col items-center gap-1.5 text-gray-400">
+          <span className="material-symbols-outlined text-[28px]">settings</span>
+          <span className="text-[9px] font-bold uppercase tracking-widest">SYSTEM</span>
+        </button>
       </nav>
     </div>
   );
