@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './TownHall/App';
+import App from './App';
 
 const CURRENT_VERSION = '1.1.4';
 const rootElement = document.getElementById('root');

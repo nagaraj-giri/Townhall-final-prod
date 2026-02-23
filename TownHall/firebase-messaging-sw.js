@@ -20,8 +20,8 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification?.title || "Town Hall Alert";
   const notificationOptions = {
     body: payload.notification?.body || "Check your dashboard for updates.",
-    icon: "https://i.postimg.cc/mD8z7DqZ/townhall-logo.png", 
-    badge: "https://i.postimg.cc/mD8z7DqZ/townhall-logo.png",
+    icon: "/favicon.ico", 
+    badge: "/favicon.ico",
     data: {
       actionUrl: payload.data?.actionUrl || '/'
     }

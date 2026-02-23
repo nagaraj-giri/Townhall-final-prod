@@ -1,0 +1,94 @@
+
+{
+  "system": "Town Hall UAE",
+  "version": "4.1.0-PROD-RELATIONAL",
+  "status": "STABLE",
+  "root_collections": {
+    "users": {
+      "attributes": {
+        "id": "UID",
+        "name": "DisplayName",
+        "email": "AuthEmail",
+        "role": "CUSTOMER | PROVIDER | ADMIN",
+        "avatar": "StorageURL",
+        "phone": "+971 format",
+        "nationality": "ISO Name",
+        "isVerified": "Boolean",
+        "status": "pending_approval | verified | suspended",
+        "location": { "lat": "number", "lng": "number" },
+        "geoHash": "GIS Key",
+        "locationName": "Dubai District Name",
+        "services": "LeadMatchKeys[]",
+        "categories": "DisplayTags[]",
+        "gallery": "PortfolioURLs[]",
+        "rating": "Number(0-5)",
+        "createdAt": "ISO8601",
+        "lastLoginAt": "ISO8601"
+      }
+    },
+    "rfqs": {
+      "description": "Marketplace Queries with rich snapshots for zero-latency retrieval.",
+      "attributes": {
+        "id": "rfq_TIMESTAMP",
+        "idDisplay": "#DXB-XXXX",
+        "customerId": "UID Ref",
+        "customerName": "Snapshot",
+        "customerEmail": "Snapshot (Rich)",
+        "customerPhone": "Snapshot (Rich)",
+        "customerAvatar": "Snapshot",
+        "title": "Header",
+        "description": "Details",
+        "service": "TargetStream",
+        "location": { "lat": "number", "lng": "number" },
+        "locationName": "District",
+        "status": "OPEN | ACTIVE | ACCEPTED | COMPLETED | CANCELED",
+        "searchRadius": "KM Range",
+        "quotesCount": "Number",
+        "acceptedQuoteId": "QuoteRef",
+        "createdAt": "ISO8601"
+      }
+    },
+    "matches": {
+      "description": "Relational discovery engine linking RFQs to suitable providers.",
+      "attributes": {
+        "id": "rfqId_providerId",
+        "rfqId": "RFQ Reference Key",
+        "providerId": "UID",
+        "providerName": "Snapshot",
+        "email": "Snapshot",
+        "phone": "Snapshot",
+        "distance": "KM",
+        "phaseNumber": "1 | 2 | 3",
+        "notifiedAt": "ISO8601",
+        "aiReasoning": "AIRRA Fit Analysis",
+        "relevancyScore": "Match Percentage"
+      }
+    },
+    "quotes": {
+      "description": "Forensic proposals from verified experts.",
+      "attributes": {
+        "id": "q_TIMESTAMP",
+        "rfqId": "RFQ Ref",
+        "providerId": "UID Ref",
+        "providerName": "Snapshot",
+        "providerEmail": "Snapshot",
+        "providerPhone": "Snapshot",
+        "providerAvatar": "Snapshot",
+        "providerRating": "Snapshot",
+        "price": "AED Amount",
+        "status": "SENT | ACCEPTED | REJECTED",
+        "createdAt": "ISO8601"
+      }
+    },
+    "audit_logs": {
+      "attributes": {
+        "actor": { "userId": "string", "userName": "string", "userRole": "string" },
+        "target": { "entity": "string", "entityId": "string" },
+        "title": "Narrative",
+        "type": "INTEGRITY | USER | BID",
+        "severity": "LOW | MEDIUM | HIGH",
+        "timestamp": "ISO8601"
+      }
+    }
+  }
+}
