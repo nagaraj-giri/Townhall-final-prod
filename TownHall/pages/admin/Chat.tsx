@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 // @ts-ignore
 import { useNavigate, useParams } from 'react-router-dom';
 import { User, ChatMessage, UserRole } from '../../types';
-import { dataService } from '../services/dataService';
+import { dataService } from '../../services/dataService';
 import { ChatService } from '../../ChatEngine/ChatService';
 import { useApp } from '../../App';
 

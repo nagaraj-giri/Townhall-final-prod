@@ -72,6 +72,11 @@ export const dataService = {
     return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id }))));
   },
 
+  listenToMatchesByProvider: (providerId: string, callback: (matches: any[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.MATCHES), where('providerId', '==', providerId), orderBy('indexedAt', 'desc'));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id }))));
+  },
+
   deleteRFQ: async (id: string) => {
     await deleteDoc(doc(db, COLLECTIONS.RFQS, id));
   },
@@ -182,22 +187,22 @@ export const dataService = {
   },
 
   getEmailConfig: async (): Promise<EmailConfig> => {
-    const snap = await getDoc(doc(db, ...SETTINGS_DOC_PATH.LOGIC));
+    const snap = await getDoc(doc(db, SETTINGS_DOC_PATH.LOGIC[0], SETTINGS_DOC_PATH.LOGIC[1]));
     if (snap.exists()) return snap.data() as EmailConfig;
     return { triggers: { "NEW_LEAD": { email: true, inApp: true } } };
   },
 
   saveEmailConfig: async (config: EmailConfig) => {
-    await setDoc(doc(db, ...SETTINGS_DOC_PATH.LOGIC), config, { merge: true });
+    await setDoc(doc(db, SETTINGS_DOC_PATH.LOGIC[0], SETTINGS_DOC_PATH.LOGIC[1]), config, { merge: true });
   },
 
   getSettings: async (): Promise<any> => {
-    const snap = await getDoc(doc(db, ...SETTINGS_DOC_PATH.SITE));
+    const snap = await getDoc(doc(db, SETTINGS_DOC_PATH.SITE[0], SETTINGS_DOC_PATH.SITE[1]));
     return snap.exists() ? snap.data() : null;
   },
 
   saveSettings: async (settings: any) => {
-    await setDoc(doc(db, ...SETTINGS_DOC_PATH.SITE), settings, { merge: true });
+    await setDoc(doc(db, SETTINGS_DOC_PATH.SITE[0], SETTINGS_DOC_PATH.SITE[1]), settings, { merge: true });
   },
 
   listenToBroadcasts: (callback: (broadcasts: any[]) => void): Unsubscribe => {
@@ -264,7 +269,7 @@ export const dataService = {
     await setDoc(doc(db, COLLECTIONS.PROVIDER_REQUESTS, request.id), request, { merge: true });
   },
 
-  triggerLeadMatchingNotifications: async (rfq) => {
+  triggerLeadMatchingNotifications: async (rfq: RFQ) => {
     await updateDoc(doc(db, COLLECTIONS.RFQS, rfq.id), { 
       lastMatchTriggeredAt: new Date().toISOString() 
     });

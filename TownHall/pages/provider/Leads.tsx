@@ -112,6 +112,21 @@ const Leads: React.FC<LeadsProps> = ({ user }) => {
           </p>
         </div>
 
+        {!user.isVerified && (
+          <div className="bg-primary/5 border border-primary/10 p-5 rounded-[2rem] flex items-center justify-between group active:bg-primary/10 transition-colors cursor-pointer" onClick={() => navigate('/profile')}>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-primary shadow-sm">
+                <span className="material-symbols-outlined font-black">gpp_maybe</span>
+              </div>
+              <div>
+                <p className="text-[11px] font-black text-primary uppercase tracking-widest">Verification Required</p>
+                <p className="text-[10px] text-gray-400 font-bold">Complete your profile to unlock bidding.</p>
+              </div>
+            </div>
+            <span className="material-symbols-outlined text-primary opacity-40 group-hover:opacity-100 transition-opacity">chevron_right</span>
+          </div>
+        )}
+
         <div className="flex gap-1 justify-between bg-white rounded-full p-1 border border-gray-100 shadow-soft">
           {(['Active', 'Pending', 'Accepted', 'Completed'] as ProviderTab[]).map((tab) => (
             <button

@@ -49,8 +49,13 @@ service cloud.firestore {
     }
 
     match /matches/{matchId} {
-      // Access granted if user is signed in. Writes restricted to Admin or the RFQ owner via rfqId check.
-      allow read: if isSignedIn();
+      // Access granted if user is signed in. 
+      // Providers can see their own matches, Customers can see matches for their RFQs.
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        resource.data.providerId == request.auth.uid || 
+        isRFQOwner(resource.data.rfqId)
+      );
       allow write: if isAdmin() || (isSignedIn() && isRFQOwner(request.resource.data.rfqId));
     }
 
@@ -104,7 +109,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isSignedIn();
       allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
     match /categories/{catId} {

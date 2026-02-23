@@ -107,7 +107,7 @@ const RFQDetail: React.FC<RFQDetailProps> = ({ user }) => {
   if (!rfq) return <div className="p-20 text-center font-black uppercase text-[10px] text-gray-300 tracking-[0.2em] animate-pulse">Syncing...</div>;
 
   const isLocked = rfq.status === 'COMPLETED' || rfq.status === 'CANCELED' || (rfq.status === 'ACCEPTED' && rfq.acceptedQuoteId !== myQuote?.id);
-  const distance = (user.location && rfq.lat) ? calculateDistance(user.location.lat, user.location.lng, rfq.lat, rfq.lng).toFixed(1) : '?';
+  const distance = (user.location && rfq.lat && rfq.lng) ? calculateDistance(user.location.lat, user.location.lng, rfq.lat, rfq.lng).toFixed(1) : '?';
 
   return (
     <div className="flex flex-col min-h-screen bg-transparent pb-24">
