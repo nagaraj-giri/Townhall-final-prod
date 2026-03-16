@@ -138,7 +138,7 @@ const RFQDetail: React.FC<RFQDetailProps> = ({ user }) => {
         await dataService.markQuoteAsAccepted(quote.id, rfq.id);
         showToast("Proposal Accepted Successfully!", "success");
         playRingtone();
-        navigate('/messages/' + quote.providerId);
+        navigate(`/messages/${quote.providerId}/${rfq.id}`);
       } catch (err: any) {
         console.error("Critical Accept bid error:", err);
         showToast("System error during acceptance.", "error");

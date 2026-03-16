@@ -370,6 +370,51 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
            </div>
         </section>
 
+        {/* Push Notifications Section */}
+        <section className="space-y-4">
+           <div className="flex justify-between items-center px-1">
+              <h3 className="text-[16px] font-black text-text-dark tracking-tight">App Notifications</h3>
+              <div className="flex items-center gap-1.5">
+                <div className={`w-2 h-2 rounded-full ${Notification.permission === 'granted' ? 'bg-accent-green' : 'bg-red-500'}`}></div>
+                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                  {Notification.permission === 'granted' ? 'Active' : 'Disabled'}
+                </span>
+              </div>
+           </div>
+           <div className="bg-white rounded-[2.5rem] p-8 shadow-soft border border-white space-y-6">
+              <div className="flex items-start gap-5">
+                 <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center text-primary shrink-0">
+                    <span className="material-symbols-outlined text-3xl">notifications_active</span>
+                 </div>
+                 <div className="flex-1">
+                    <p className="text-[15px] font-black text-text-dark uppercase tracking-tight">Real-time Lead Alerts</p>
+                    <p className="text-[12px] text-gray-400 font-medium leading-relaxed mt-1">
+                       Never miss a lead. Get instant push alerts for new requests and quote approvals.
+                       <span className="block mt-2 text-primary/60 text-[10px] font-bold">iOS: Must be added to Home Screen first.</span>
+                    </p>
+                 </div>
+              </div>
+              
+              {Notification.permission !== 'granted' && (
+                <button 
+                  onClick={async () => {
+                    const { pushNotificationService } = await import('../../AlertsEngine/PushEngine/PushNotificationService');
+                    const success = await pushNotificationService.requestPermission(user);
+                    if (success) {
+                      showToast("Notifications enabled!", "success");
+                      window.location.reload();
+                    } else {
+                      showToast("Permission denied or not supported", "error");
+                    }
+                  }}
+                  className="w-full py-5 bg-primary text-white rounded-[1.5rem] text-[12px] font-black uppercase tracking-[0.2em] shadow-btn-glow active:scale-[0.98] transition-all"
+                >
+                  Enable Device Alerts
+                </button>
+              )}
+           </div>
+        </section>
+
         {/* Logout Section */}
         <div className="px-1 pt-4 pb-12">
           <button 

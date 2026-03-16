@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { RFQ, User } from "../types";
+import { safeStringify } from "../App";
 
 const getAIRRAInstance = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -62,7 +63,7 @@ export const performStrategicMatchAnalysis = async (rfq: RFQ, providers: User[])
       Context: "${rfq.description}".
       
       Compare this request against the following pool of experts and provide analysis:
-      ${JSON.stringify(providerPool)}`,
+      ${safeStringify(providerPool)}`,
       config: { 
         thinkingConfig: { thinkingBudget: 32768 }, 
         responseMimeType: "application/json",

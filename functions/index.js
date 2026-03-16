@@ -79,6 +79,31 @@ async function dispatchMultiChannelAlert(db, rfqId, rfqData, provider) {
 }
 
 /**
+ * Dispatches a notification to a customer.
+ * @param {FirebaseFirestore.Firestore} db The Firestore instance.
+ * @param {string} customerId The ID of the customer.
+ * @param {string} rfqId The ID of the RFQ.
+ * @param {string} title The notification title.
+ * @param {string} message The notification message.
+ * @return {Promise<void>}
+ */
+async function dispatchCustomerNotification(db, customerId, rfqId, title, message) {
+  const customerNotifId = `notif_customer_${rfqId}_${Date.now()}`;
+  await db.collection("notifications").doc(customerNotifId).set({
+    id: customerNotifId,
+    userId: customerId,
+    title: title,
+    message: message,
+    type: CONFIG.NOTIF_TYPE_SUCCESS,
+    targetRole: CONFIG.ROLE_CUSTOMER,
+    actionUrl: `${CONFIG.APP_BASE_URL}/#/customer/rfq/${rfqId}`,
+    sound: "default",
+    isRead: false,
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+/**
  * 1. DISCOVERY INITIALIZATION (Root Index-First)
  */
 exports.onRFQCreated = onDocumentCreated("rfqs/{rfqId}", async (event) => {
@@ -150,21 +175,14 @@ exports.onRFQCreated = onDocumentCreated("rfqs/{rfqId}", async (event) => {
 
     // Notify Customer about matches
     if (uniquePool.length > 0) {
-      const customerNotifId = `notif_matches_${rfqId}`;
-      await db.collection("notifications").doc(customerNotifId).set({
-        id: customerNotifId,
-        userId: rfqData.customerId,
-        title: "🚀 MATCHES FOUND!",
-        message: `We found ${uniquePool.length} verified providers for your "${rfqData.service}" request. Expect quotes soon!`,
-        type: CONFIG.NOTIF_TYPE_SUCCESS,
-        targetRole: CONFIG.ROLE_CUSTOMER,
-        actionUrl: `${CONFIG.APP_BASE_URL}/#/customer/rfq/${rfqId}`,
-        sound: "default",
-        isRead: false,
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      await dispatchCustomerNotification(
+          db,
+          rfqData.customerId,
+          rfqId,
+          "🚀 MATCHES FOUND!",
+          `We found ${uniquePool.length} verified providers for your "${rfqData.service}" request. Expect quotes soon!`,
+      );
     }
-
   } catch (error) {
     logger.error(`Lead Engine Critical Failure: ${rfqId}`, error);
   }
@@ -222,21 +240,13 @@ exports.onQuoteCreated = onDocumentCreated("quotes/{quoteId}", async (event) => 
   if (!rfqData) return;
 
   const batch = db.batch();
-  const notifId = `notif_quote_${quoteData.id}`;
-  
-  // In-App for Customer
-  batch.set(db.collection("notifications").doc(notifId), {
-    id: notifId,
-    userId: rfqData.customerId,
-    title: "💰 NEW QUOTE RECEIVED",
-    message: `${quoteData.providerName} submitted a proposal for "${rfqData.title}" at AED ${quoteData.price}.`,
-    type: CONFIG.NOTIF_TYPE_SUCCESS,
-    targetRole: CONFIG.ROLE_CUSTOMER,
-    actionUrl: `${CONFIG.APP_BASE_URL}/#/customer/rfq/${rfqData.id}`,
-    isRead: false,
-    sound: "default", // Add sound for customer notification
-    timestamp: admin.firestore.FieldValue.serverTimestamp(),
-  });
+  await dispatchCustomerNotification(
+      db,
+      rfqData.customerId,
+      quoteData.rfqId,
+      "💰 NEW QUOTE RECEIVED",
+      `${quoteData.providerName} submitted a proposal for "${rfqData.title}" at AED ${quoteData.price}.`,
+  );
 
   // Email for Customer
   if (rfqData.customerEmail) {
@@ -374,4 +384,42 @@ exports.onRFQStatusChanged = onDocumentUpdated("rfqs/{rfqId}", async (event) => 
   }
 
   return batch.commit();
+});
+
+/**
+ * TRIGGER: WhatsApp Message Dispatcher
+ * @summary Processes queued WhatsApp messages and dispatches them via Twilio.
+ * @description This Cloud Function is triggered when a new document is
+ *   created in the "whatsapp_queue" Firestore collection. It checks the
+ *   message status, constructs a Twilio API request, sends the message, and
+ *   updates the document's status based on the Twilio response.
+ */
+exports.onWhatsAppQueued = onDocumentCreated("whatsapp_queue/{msgId}", async (event) => {
+  const snap = event.data;
+  const data = snap.data();
+
+  if (data.status !== "PENDING") return null;
+
+  try {
+    const twilioSid = process.env.TWILIO_SID;
+    const twilioSecret = process.env.TWILIO_SECRET;
+    const twilioAccSid = process.env.TWILIO_ACC_SID;
+    const twilioFrom = process.env.TWILIO_FROM;
+
+    if (!twilioSid || !twilioSecret || !twilioAccSid || !twilioFrom) {
+      logger.error("Twilio environment variables are not set.");
+      await snap.ref.update({status: "ERROR", error: "Missing Twilio config"});
+      return;
+    }
+
+    const twilio = require("twilio")(twilioSid, twilioSecret, {
+      accountSid: twilioAccSid,
+    });
+
+    const message = await twilio.messages.create({from: twilioFrom, to: data.to, body: data.body});
+    await snap.ref.update({status: "SENT", messageSid: message.sid});
+  } catch (error) {
+    logger.error("Error sending WhatsApp message:", error);
+    await snap.ref.update({status: "ERROR", error: error.message});
+  }
 });

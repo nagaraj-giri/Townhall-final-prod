@@ -280,6 +280,50 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
           </div>
         </section>
 
+        {/* Push Notifications Section */}
+        <section className="space-y-4">
+          <div className="flex justify-between items-center px-1">
+            <h3 className="text-[13px] font-black text-text-dark uppercase tracking-[0.1em]">App Notifications</h3>
+            <div className="flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${Notification.permission === 'granted' ? 'bg-accent-green' : 'bg-red-500'}`}></div>
+              <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                {Notification.permission === 'granted' ? 'Active' : 'Disabled'}
+              </span>
+            </div>
+          </div>
+          <div className="bg-white rounded-[2rem] p-6 shadow-card border border-white space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-primary/5 flex items-center justify-center text-primary shrink-0">
+                <span className="material-symbols-outlined text-2xl">notifications_active</span>
+              </div>
+              <div>
+                <p className="text-[13px] font-bold text-text-dark leading-tight">Enable Real-time Alerts</p>
+                <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">
+                  Get instant updates on your quotes and messages. For iOS, ensure you've added the app to your Home Screen.
+                </p>
+              </div>
+            </div>
+            
+            {Notification.permission !== 'granted' && (
+              <button 
+                onClick={async () => {
+                  const { pushNotificationService } = await import('../../AlertsEngine/PushEngine/PushNotificationService');
+                  const success = await pushNotificationService.requestPermission(user);
+                  if (success) {
+                    showToast("Notifications enabled!", "success");
+                    window.location.reload(); // Refresh to update UI state
+                  } else {
+                    showToast("Permission denied or not supported", "error");
+                  }
+                }}
+                className="w-full py-4 bg-primary text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-btn-glow active:scale-[0.98] transition-all"
+              >
+                Allow Notifications
+              </button>
+            )}
+          </div>
+        </section>
+
         <button onClick={onLogout} className="w-full py-5 bg-white border border-red-50 text-red-500 font-normal text-[11px] uppercase tracking-[0.3em] rounded-3xl shadow-sm active:scale-95 transition-all mt-4">
           Sign Out Session
         </button>

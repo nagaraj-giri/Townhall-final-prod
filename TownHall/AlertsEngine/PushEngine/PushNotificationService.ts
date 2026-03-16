@@ -35,35 +35,57 @@ export const pushNotificationService = {
     if (!messaging) return;
 
     try {
-      // Step 1: Request Browser Permission
-      const permission = await Notification.requestPermission();
+      // Step 1: Check permission status
+      const permission = Notification.permission;
       if (permission === 'granted') {
-        // Step 2: Get Service Worker registration
-        const registration = await navigator.serviceWorker.ready;
-        
-        // Step 3: Retrieve FCM Token
-        const token = await getToken(messaging, { 
-          vapidKey: VAPID_KEY,
-          serviceWorkerRegistration: registration
-        });
-        
-        if (token) {
-          const currentTokens = user.fcmTokens || [];
-          if (!currentTokens.includes(token)) {
-            // Keep only last 3 tokens to prevent doc size bloat
-            const updatedTokens = [...new Set([token, ...currentTokens])].slice(0, 3);
-            
-            // Sync to Firestore so Backend Functions can find this device
-            await dataService.saveUser({
-              ...user,
-              fcmTokens: updatedTokens
-            });
-            console.debug("[PushService] Secure Link Established:", user.name);
-          }
-        }
+        await pushNotificationService.registerToken(user);
       }
     } catch (error) {
       console.warn("[PushService] Device handshake failed:", error);
+    }
+  },
+
+  requestPermission: async (user: User): Promise<boolean> => {
+    const messaging = await getSafeMessaging();
+    if (!messaging) return false;
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        await pushNotificationService.registerToken(user);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("[PushService] Permission request failed:", error);
+      return false;
+    }
+  },
+
+  registerToken: async (user: User) => {
+    const messaging = await getSafeMessaging();
+    if (!messaging) return;
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const token = await getToken(messaging, { 
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: registration
+      });
+      
+      if (token) {
+        const currentTokens = user.fcmTokens || [];
+        if (!currentTokens.includes(token)) {
+          const updatedTokens = [...new Set([token, ...currentTokens])].slice(0, 3);
+          await dataService.saveUser({
+            ...user,
+            fcmTokens: updatedTokens
+          });
+          console.debug("[PushService] Secure Link Established:", user.name);
+        }
+      }
+    } catch (error) {
+      console.warn("[PushService] Token registration failed:", error);
     }
   },
 

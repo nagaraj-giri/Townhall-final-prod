@@ -57,6 +57,11 @@ export const dataService = {
     return snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as RFQ));
   },
 
+  getRFQById: async (id: string): Promise<RFQ | null> => {
+    const snap = await getDoc(doc(db, COLLECTIONS.RFQS, id));
+    return snap.exists() ? ({ ...snap.data(), id: snap.id } as RFQ) : null;
+  },
+
   listenToRFQs: (callback: (rfqs: RFQ[]) => void): Unsubscribe => {
     const q = query(collection(db, COLLECTIONS.RFQS), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as RFQ))));

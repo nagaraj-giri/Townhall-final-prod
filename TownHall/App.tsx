@@ -48,7 +48,7 @@ const ChatEngine = lazy(() => import('./ChatEngine/index').then(m => ({ default:
 const GOOGLE_MAPS_API_KEY = "AIzaSyAmJUZ265xMUIpxyXi4KC3BF-SZjlkFu6w";
 const NOTIFICATION_SOUND_URL = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
-const safeStringify = (obj: any) => {
+export const safeStringify = (obj: any) => {
   const cache = new WeakSet();
   try {
     return JSON.stringify(obj, (key, value) => {
@@ -201,7 +201,7 @@ const App: React.FC = () => {
                 <Route path="/profile" element={user ? (user.role === UserRole.ADMIN ? <AdminProfile user={user} onLogout={() => {setUser(null); localStorage.removeItem('townhall_user');}} /> : user.role === UserRole.PROVIDER ? <ProviderProfile user={user} onLogout={() => {setUser(null); localStorage.removeItem('townhall_user');}} /> : <CustomerProfile user={user} onLogout={() => {setUser(null); localStorage.removeItem('townhall_user');}} />) : <Navigate to="/login" />} />
                 <Route path="/queries" element={user ? <CustomerQueries user={user} /> : <Navigate to="/login" />} />
                 <Route path="/create-rfq" element={user?.role === UserRole.CUSTOMER ? <CustomerCreateRFQ user={user!} /> : <Navigate to="/" />} />
-                <Route path="/messages/:id?" element={user ? <ChatEngine user={user} /> : <Navigate to="/login" />} />
+                <Route path="/messages/:id?/:rfqId?" element={user ? <ChatEngine user={user} /> : <Navigate to="/login" />} />
                 <Route path="/leads" element={user?.role === UserRole.PROVIDER ? <ProviderLeads user={user!} /> : <Navigate to="/" />} />
                 <Route path="/rfq/:id" element={user ? (user.role === UserRole.PROVIDER ? <ProviderRFQDetail user={user} /> : user.role === UserRole.ADMIN ? <AdminRFQDetail user={user} /> : <CustomerRFQDetail user={user} />) : <Navigate to="/login" />} />
                 <Route path="/storefront/:id?" element={user ? <ProviderStorefront user={user!} /> : <Navigate to="/login" />} />

@@ -148,7 +148,7 @@ const RFQDetail: React.FC<RFQDetailProps> = ({ user }) => {
         {myQuote && (
           <div className="flex gap-4">
              <button 
-                onClick={() => navigate(`/messages/${rfq.customerId}`)}
+                onClick={() => navigate(`/messages/${rfq.customerId}/${rfq.id}`)}
                 className="flex-1 bg-primary text-white py-5 rounded-[2rem] font-bold text-[13px] uppercase tracking-widest shadow-btn-glow active:scale-[0.98] transition-all flex items-center justify-center gap-3"
              >
                 <span className="material-symbols-outlined">chat_bubble</span>

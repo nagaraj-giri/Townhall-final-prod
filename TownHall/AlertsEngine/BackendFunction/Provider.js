@@ -101,7 +101,7 @@ exports.onQuoteAccepted = async (change) => {
       '🏆 CONGRATULATIONS: You are Hired!', 
       `Your proposal for "${newData.rfqId}" was accepted. Start chatting now.`, 
       'SUCCESS', 
-      `/messages/${newData.customerId}`
+      `/messages/${newData.customerId}/${newData.rfqId}`
     );
 
     // Push Notification
@@ -112,7 +112,7 @@ exports.onQuoteAccepted = async (change) => {
           title: '🏆 You are Hired!',
           body: `The client has accepted your proposal for query ${newData.rfqId}.`
         },
-        data: { actionUrl: `/messages/${newData.customerId}` }
+        data: { actionUrl: `/messages/${newData.customerId}/${newData.rfqId}` }
       });
     }
   }

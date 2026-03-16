@@ -29,7 +29,7 @@ import AdminRFQDetail from '../admin/RFQDetail';
  * Robust serialization to handle circular references and complex library objects.
  * Detects minified Google Maps internal objects (Q$1, Sa, etc) to prevent JSON.stringify crashes.
  */
-const safeStringify = (obj: any) => {
+export const safeStringify = (obj: any) => {
   const cache = new WeakSet();
   try {
     return JSON.stringify(obj, (key, value) => {
@@ -37,6 +37,7 @@ const safeStringify = (obj: any) => {
         if (cache.has(value)) return; 
         
         const constructorName = value.constructor?.name;
+        // Detect minified Google Maps internal objects (Y2, Ka, etc) to prevent crashes
         const isMinifiedInternal = constructorName && (/^[A-Z]\$?[0-9]?$/.test(constructorName) || constructorName.length < 4);
 
         if (
@@ -44,7 +45,7 @@ const safeStringify = (obj: any) => {
           value.nodeType || 
           isMinifiedInternal ||
           (constructorName && (
-            ['Map', 'Place', 'Element', 'LatLng', 'Autocomplete'].some(n => constructorName.includes(n))
+            ['Map', 'Place', 'Element', 'LatLng', 'Autocomplete', 'Marker'].some(n => constructorName.includes(n))
           )) ||
           value.gm_bindings_ ||
           value.gm_accessors_ ||

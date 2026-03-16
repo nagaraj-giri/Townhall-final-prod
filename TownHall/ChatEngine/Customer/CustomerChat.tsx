@@ -10,7 +10,7 @@ interface Props { user: User; }
 
 const CustomerChat: React.FC<Props> = ({ user }) => {
   // @ts-ignore
-  const { id } = useParams();
+  const { id, rfqId } = useParams();
   // @ts-ignore
   const navigate = useNavigate();
   const { showToast, toggleNotifications, unreadCount } = useApp();
@@ -32,10 +32,19 @@ const CustomerChat: React.FC<Props> = ({ user }) => {
   useEffect(() => {
     const unsub = ChatService.listenToConversations(user.id, async (convs) => {
       const users = await dataService.getUsers();
+      const rfqs = await dataService.getRFQs();
       const enriched = convs.map(c => {
         const partnerId = c.participants?.find((p: string) => p !== user.id);
         const partner = users.find(u => u.id === partnerId);
-        return { ...c, partnerId, name: partner?.name || 'Expert', avatar: partner?.avatar, isUnread: (c.unreadCount?.[user.id] || 0) > 0 };
+        const rfq = rfqs.find(r => r.id === c.rfqId);
+        return { 
+          ...c, 
+          partnerId, 
+          name: partner?.name || 'Expert', 
+          avatar: partner?.avatar, 
+          rfqTitle: rfq?.title,
+          isUnread: (c.unreadCount?.[user.id] || 0) > 0 
+        };
       });
       setConversations(enriched);
     });
@@ -45,7 +54,7 @@ const CustomerChat: React.FC<Props> = ({ user }) => {
   useEffect(() => {
     if (id) {
       setLoading(true);
-      const roomID = ChatService.getChatRoomId(user.id, id);
+      const roomID = ChatService.getChatRoomId(user.id, id, rfqId);
       ChatService.markRoomAsRead(roomID, user.id);
       
       const unsubMsgs = ChatService.listenToMessages(roomID, (msgs) => { 
@@ -62,15 +71,19 @@ const CustomerChat: React.FC<Props> = ({ user }) => {
         if (u) setColdStartPartner({ name: u.name, avatar: u.avatar });
       });
 
+      if (rfqId) {
+        dataService.getRFQById(rfqId).then(setRelevantRfq);
+      }
+
       return () => { unsubMsgs(); unsubTyping(); };
     }
-  }, [id, user.id]);
+  }, [id, rfqId, user.id]);
 
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, partnerTyping]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value); if (!id) return;
-    const roomID = ChatService.getChatRoomId(user.id, id);
+    const roomID = ChatService.getChatRoomId(user.id, id, rfqId);
     if (!isTyping) { setIsTyping(true); ChatService.setTypingStatus(roomID, user.id, true); }
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => { setIsTyping(false); ChatService.setTypingStatus(roomID, user.id, false); }, 3000);
@@ -80,14 +93,14 @@ const CustomerChat: React.FC<Props> = ({ user }) => {
     const messageText = text || input.trim();
     if ((!messageText && !imageUrl) || !id) return;
 
-    const roomID = ChatService.getChatRoomId(user.id, id);
+    const roomID = ChatService.getChatRoomId(user.id, id, rfqId);
     const msgData: ChatMessage = { 
       id: `msg_${Date.now()}`, senderId: user.id, recipientId: id, text: messageText, 
       timestamp: new Date().toISOString(), status: 'sent', imageUrl: imageUrl 
     };
 
     try {
-      await ChatService.sendMessage(roomID, msgData, user.role, id);
+      await ChatService.sendMessage(roomID, msgData, user.role, id, rfqId);
       if (!imageUrl) setInput(''); 
       setIsTyping(false); ChatService.setTypingStatus(roomID, user.id, false);
     } catch (err: any) { showToast(err.message, "error"); }
@@ -169,13 +182,19 @@ const CustomerChat: React.FC<Props> = ({ user }) => {
       </header>
       <main className="px-5 space-y-4 flex-1 overflow-y-auto no-scrollbar">
         {conversations.map((conv) => (
-          <div key={conv.id} onClick={() => navigate(`/messages/${conv.partnerId}`)} className="bg-white rounded-[2.2rem] p-6 flex items-center gap-5 shadow-card border border-white cursor-pointer active:scale-[0.98] transition-all">
+          <div key={conv.id} onClick={() => navigate(`/messages/${conv.partnerId}/${conv.rfqId || ''}`)} className="bg-white rounded-[2.2rem] p-6 flex items-center gap-5 shadow-card border border-white cursor-pointer active:scale-[0.98] transition-all">
             <div className="relative">
               <img src={conv.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(conv.name)}&background=5B3D9D&color=fff`} className="w-16 h-16 rounded-[1.4rem] object-cover" alt="" />
               {conv.isUnread && <div className="absolute -top-1 -right-1 w-5 h-5 bg-accent-pink border-4 border-white rounded-full"></div>}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex justify-between items-center mb-1"><h2 className="text-[16px] font-black text-text-dark uppercase truncate">{conv.name}</h2><span className="text-[9px] font-bold text-gray-300">{new Date(conv.lastTimestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span></div>
+              <div className="flex justify-between items-center mb-1">
+                <div className="min-w-0">
+                  <h2 className="text-[16px] font-black text-text-dark uppercase truncate">{conv.name}</h2>
+                  {conv.rfqTitle && <p className="text-[9px] font-bold text-primary uppercase tracking-widest truncate">Query: {conv.rfqTitle}</p>}
+                </div>
+                <span className="text-[9px] font-bold text-gray-300">{new Date(conv.lastTimestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+              </div>
               <p className={`text-[12px] ${conv.isUnread ? 'text-primary font-black' : 'text-gray-400 font-medium'} truncate`}>{conv.lastMessage}</p>
             </div>
           </div>

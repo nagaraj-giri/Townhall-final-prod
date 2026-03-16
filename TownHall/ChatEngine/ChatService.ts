@@ -7,11 +7,24 @@ import { ChatMessage, UserRole } from "../types";
 import { dataService } from "../services/dataService";
 
 export const ChatService = {
-  getChatRoomId: (uid1: string, uid2: string) => [uid1, uid2].sort().join('_'),
+  getChatRoomId: (uid1: string, uid2: string, rfqId?: string) => {
+    const base = [uid1, uid2].sort().join('_');
+    return rfqId ? `${base}_${rfqId}` : base;
+  },
 
   listenToConversations: (userId: string, callback: (convs: any[]) => void): Unsubscribe => {
-    const q = query(collection(db, 'chats'), where('participants', 'array-contains', userId), orderBy('lastTimestamp', 'desc'));
-    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id }))), (e) => console.debug("Listen error convs", e.message));
+    // Simplified query to avoid composite index requirement which often causes permission errors in preview
+    const q = query(collection(db, 'chats'), where('participants', 'array-contains', userId));
+    return onSnapshot(q, (s) => {
+      const docs = s.docs.map(d => ({ ...d.data(), id: d.id }));
+      // Sort in memory instead of Firestore to avoid index requirement
+      docs.sort((a: any, b: any) => {
+        const t1 = new Date(a.lastTimestamp || 0).getTime();
+        const t2 = new Date(b.lastTimestamp || 0).getTime();
+        return t2 - t1;
+      });
+      callback(docs);
+    }, (e) => console.debug("Listen error convs", e.message));
   },
 
   listenToMessages: (chatRoomId: string, callback: (msgs: ChatMessage[]) => void): Unsubscribe => {
@@ -54,33 +67,36 @@ export const ChatService = {
     } catch (err) {}
   },
 
-  sendMessage: async (chatRoomId: string, msg: any, role: UserRole, recipientId: string) => {
+  sendMessage: async (chatRoomId: string, msg: any, role: UserRole, recipientId: string, rfqId?: string) => {
     try {
       const roomRef = doc(db, 'chats', chatRoomId);
       const messageRef = doc(db, 'chats', chatRoomId, 'history', msg.id);
       const roomSnap = await getDoc(roomRef);
       const lastText = msg.text || (msg.imageUrl ? "Sent an image" : "New message");
 
-      // PRD 4.6 Initiation Guard: Only Customer can start a chat
+      // PRD 4.6 Initiation Guard: Only Customer can start a chat for a new context
       if (!roomSnap.exists()) {
         if (role === UserRole.PROVIDER) {
-          throw new Error("PROVIDER_RESTRICTED: Only customers can initiate a conversation. You can reply once they message you.");
+          throw new Error("PROVIDER_RESTRICTED: Only customers can initiate a conversation for a new query. You can reply once they message you.");
         }
 
         // PRD 4.3 Logic: Verify quote exists from this specific provider before initiation
+        // If rfqId is provided, we check that specific RFQ
         const quotes = await dataService.getQuotes();
         const hasQuote = quotes.some(q => 
           q.providerId === recipientId && 
-          q.status !== 'REJECTED'
+          q.status !== 'REJECTED' &&
+          (!rfqId || q.rfqId === rfqId)
         );
 
         if (!hasQuote) {
-          throw new Error("MESSAGING_LOCKED: You can only chat with providers who have submitted a proposal.");
+          throw new Error("MESSAGING_LOCKED: You can only chat with providers who have submitted a proposal for this request.");
         }
 
         // Create initial room metadata
         await setDoc(roomRef, { 
           id: chatRoomId, 
+          rfqId: rfqId || null,
           participants: [msg.senderId, recipientId], 
           lastMessage: lastText, 
           lastTimestamp: msg.timestamp, 
