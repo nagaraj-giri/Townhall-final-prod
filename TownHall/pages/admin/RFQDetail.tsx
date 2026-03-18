@@ -146,7 +146,7 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
     <div className="flex flex-col min-h-screen bg-transparent pb-10">
       <header className="px-6 pt-12 pb-4 flex items-center bg-transparent sticky top-0 z-50">
         <button onClick={() => navigate(-1)} className="text-[#333333] w-12 h-12 flex items-center justify-center -ml-3 rounded-full active:bg-gray-100 transition-colors">
-          <span className="material-symbols-outlined font-black text-[28px]">arrow_back</span>
+          <span className="material-symbols-outlined wght-700 text-[28px]">arrow_back</span>
         </button>
         <div className="ml-2 flex-1">
           <h1 className="text-[18px] font-bold text-[#333333] tracking-tight leading-tight uppercase">Query {rfq.idDisplay}</h1>
@@ -156,7 +156,7 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
           onClick={() => setIsEditing(!isEditing)}
           className={`w-12 h-12 rounded-full flex items-center justify-center shadow-md transition-all active:scale-90 ${isEditing ? 'bg-primary text-white' : 'bg-white text-primary'}`}
         >
-          <span className="material-symbols-outlined font-black">{isEditing ? 'close' : 'edit'}</span>
+          <span className="material-symbols-outlined wght-700">{isEditing ? 'close' : 'edit'}</span>
         </button>
       </header>
 
@@ -185,11 +185,11 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
                    <option key={s} value={s}>{s}</option>
                  ))}
                </select>
-               <span className="absolute right-5 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 pointer-events-none font-black">unfold_more</span>
+               <span className="absolute right-5 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 pointer-events-none wght-700">unfold_more</span>
              </div>
            ) : (
              <div className="flex items-start gap-3 bg-gray-50/50 p-4 rounded-2xl border border-gray-100/50">
-                <span className="material-symbols-outlined text-gray-300 text-[20px] font-bold mt-0.5">info</span>
+                <span className="material-symbols-outlined text-gray-300 text-[20px] wght-700 mt-0.5">info</span>
                 <p className="text-[12px] text-gray-400 font-medium leading-relaxed">
                    Status managed by platform core and admin overrides.
                 </p>
@@ -204,13 +204,13 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
                  <div className="relative shrink-0">
                     <img src={rfq.customerAvatar} className="w-16 h-16 rounded-[1.4rem] object-cover border-2 border-white shadow-sm ring-1 ring-gray-100" alt="" />
                     <div className="absolute -bottom-1 -right-1 bg-accent-green w-6 h-6 rounded-full border-4 border-white flex items-center justify-center shadow-md">
-                       <span className="material-symbols-outlined text-white text-[12px] font-black">check</span>
+                       <span className="material-symbols-outlined text-white text-[12px] wght-700">check</span>
                     </div>
                  </div>
                  <div className="flex-1 min-w-0">
                     <h2 className="text-[18px] font-black text-[#333333] leading-none uppercase truncate">{rfq.customerName || 'Requester'}</h2>
                     <div className="flex items-start gap-1.5 mt-2">
-                       <span className="material-symbols-outlined text-accent-pink text-[18px] font-black shrink-0">location_on</span>
+                       <span className="material-symbols-outlined text-accent-pink text-[18px] wght-700 shrink-0">location_on</span>
                        <p className="text-[12px] text-gray-400 font-medium leading-snug">{rfq.locationName || 'Dubai, UAE'}</p>
                     </div>
                  </div>
@@ -252,17 +252,17 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
                    
                    <div className="space-y-3 pt-1">
                       <div className="flex items-center gap-2 text-gray-400">
-                         <span className="material-symbols-outlined text-[20px] font-black opacity-60">location_on</span>
+                         <span className="material-symbols-outlined text-[20px] wght-700 opacity-60">location_on</span>
                          <p className="text-[13px] font-bold text-text-light truncate">{(m.locationName || 'Dubai Region').split(',')[0]}</p>
                       </div>
                       
                       <div className="flex gap-6">
                          <div className="flex items-center gap-2 text-primary">
-                            <span className="material-symbols-outlined text-[20px] font-black">call</span>
+                            <span className="material-symbols-outlined text-[20px] wght-700">call</span>
                             <p className="text-[12px] font-[700] tracking-tight">{m.phone || '+971 50 000 0000'}</p>
                          </div>
                          <div className="flex items-center gap-2 text-primary min-w-0 flex-1">
-                            <span className="material-symbols-outlined text-[20px] font-black shrink-0">mail</span>
+                            <span className="material-symbols-outlined text-[20px] wght-700 shrink-0">mail</span>
                             <p className="text-[12px] font-[700] truncate lowercase">{m.email || 'office@provider.ae'}</p>
                          </div>
                       </div>
@@ -276,14 +276,14 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
                         </div>
                         {m.hasBid && (
                            <div className={`flex items-center gap-1.5 ${m.isAccepted ? 'text-accent-green' : 'text-[#9C27B0]'}`}>
-                              <span className="material-symbols-outlined text-[18px] font-black animate-in zoom-in">{m.isAccepted ? 'verified' : 'payments'}</span>
+                              <span className="material-symbols-outlined text-[18px] wght-700 animate-in zoom-in">{m.isAccepted ? 'verified' : 'payments'}</span>
                               <p className="text-[10px] font-black uppercase tracking-[0.1em]">{m.isAccepted ? 'Bid Accepted' : 'Bid Submitted'}</p>
                            </div>
                         )}
                       </div>
                       <button onClick={() => navigate(`/admin/user/${m.providerId}`)} className="flex items-center gap-1 text-gray-300 hover:text-primary transition-all active:scale-95">
                          <span className="text-[10px] font-black uppercase tracking-[0.1em]">View Record</span>
-                         <span className="material-symbols-outlined text-[20px] font-black">chevron_right</span>
+                         <span className="material-symbols-outlined text-[20px] wght-700">chevron_right</span>
                       </button>
                    </div>
                 </div>
@@ -324,7 +324,7 @@ const AdminRFQDetail: React.FC<AdminRFQDetailProps> = ({ user }) => {
             onClick={handleDeleteRFQ}
             className="w-full py-5 bg-white border-2 border-white rounded-[1.8rem] shadow-card flex items-center justify-center gap-3 active:scale-[0.98] transition-all group"
            >
-              <span className="material-symbols-outlined text-red-500 font-black group-active:scale-110">delete</span>
+              <span className="material-symbols-outlined text-red-500 wght-700 group-active:scale-110">delete</span>
               <span className="text-[13px] font-black text-red-500 uppercase tracking-[0.2em]">DELETE ENTIRE QUERY</span>
            </button>
         </div>

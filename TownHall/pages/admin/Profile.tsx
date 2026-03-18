@@ -21,18 +21,27 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
   const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
-    const unsubUsers = dataService.listenToUsers((usrs) => {
-      const customers = usrs.filter(u => u.role === UserRole.CUSTOMER).length;
-      const providers = usrs.filter(u => u.role === UserRole.PROVIDER).length;
-      setStatsData(prev => ({ ...prev, customers, providers }));
-    });
+    const fetchStats = async () => {
+      try {
+        const [roleCounts, marketStats] = await Promise.all([
+          dataService.getUserRoleCounts(),
+          dataService.getMarketplaceStats()
+        ]);
+        setStatsData({
+          customers: roleCounts.customers,
+          providers: roleCounts.providers,
+          rfqs: marketStats.totalRFQs
+        });
+      } catch (err) {
+        console.error("Error fetching admin profile stats:", err);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
 
-    const unsubRfqs = dataService.listenToRFQs((rfqs) => {
-      setStatsData(prev => ({ ...prev, rfqs: rfqs.length }));
-      setLoadingStats(false);
-    });
-
-    return () => { unsubUsers(); unsubRfqs(); };
+    fetchStats();
+    const interval = setInterval(fetchStats, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleAdminAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,6 +103,22 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
             </div>
           </div>
 
+          {/* Stats Section */}
+          <div className="px-6 grid grid-cols-3 gap-3">
+            <div className="bg-white p-4 rounded-3xl shadow-soft border border-white text-center">
+              <p className="text-[18px] font-black text-text-dark">{loadingStats ? '...' : statsData.customers}</p>
+              <p className="text-[8px] text-gray-400 font-black uppercase tracking-widest mt-1">Customers</p>
+            </div>
+            <div className="bg-white p-4 rounded-3xl shadow-soft border border-white text-center">
+              <p className="text-[18px] font-black text-text-dark">{loadingStats ? '...' : statsData.providers}</p>
+              <p className="text-[8px] text-gray-400 font-black uppercase tracking-widest mt-1">Providers</p>
+            </div>
+            <div className="bg-white p-4 rounded-3xl shadow-soft border border-white text-center">
+              <p className="text-[18px] font-black text-text-dark">{loadingStats ? '...' : statsData.rfqs}</p>
+              <p className="text-[8px] text-gray-400 font-black uppercase tracking-widest mt-1">Queries</p>
+            </div>
+          </div>
+
           {/* Core Marketplace Management */}
           <div className="px-6 space-y-4">
              <h3 className="text-[11px] text-gray-400 font-black uppercase tracking-[0.2em] ml-2">Marketplace Control</h3>
@@ -112,7 +137,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                         <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Edit Categories & Icons</p>
                       </div>
                     </div>
-                    <span className="material-symbols-outlined text-gray-300 font-bold">chevron_right</span>
+                    <span className="material-symbols-outlined text-gray-300 wght-700">chevron_right</span>
                 </button>
 
                 <div className="h-[1px] bg-gray-50 mx-4"></div>
@@ -131,7 +156,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                         <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Logo, Name & Colors</p>
                       </div>
                     </div>
-                    <span className="material-symbols-outlined text-gray-300 font-bold">chevron_right</span>
+                    <span className="material-symbols-outlined text-gray-300 wght-700">chevron_right</span>
                 </button>
              </div>
           </div>
@@ -140,6 +165,44 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
           <div className="px-6 space-y-4">
              <h3 className="text-[11px] text-gray-400 font-black uppercase tracking-[0.2em] ml-2">Integrity & Logs</h3>
              <div className="bg-white rounded-[2.8rem] p-4 shadow-soft border border-white space-y-2 relative z-[20]">
+                <button 
+                  type="button"
+                  onClick={() => navigate('/admin/users')} 
+                  className="w-full p-5 rounded-[2rem] flex items-center justify-between group active:bg-gray-50 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                    <div className="flex items-center gap-4 pointer-events-none">
+                      <div className="w-14 h-14 bg-green-50 text-accent-green rounded-2xl flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[32px] wght-300">group</span>
+                      </div>
+                      <div className="text-left">
+                        <h3 className="text-[15px] font-black text-text-dark uppercase tracking-tight">User Directory</h3>
+                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">All Registered Users</p>
+                      </div>
+                    </div>
+                    <span className="material-symbols-outlined text-gray-300 wght-700">chevron_right</span>
+                </button>
+
+                <div className="h-[1px] bg-gray-50 mx-4"></div>
+
+                <button 
+                  type="button"
+                  onClick={() => navigate('/admin/providers')} 
+                  className="w-full p-5 rounded-[2rem] flex items-center justify-between group active:bg-gray-50 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                    <div className="flex items-center gap-4 pointer-events-none">
+                      <div className="w-14 h-14 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[32px]">storefront</span>
+                      </div>
+                      <div className="text-left">
+                        <h3 className="text-[15px] font-black text-text-dark uppercase tracking-tight">Provider Hub</h3>
+                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Services & Performance</p>
+                      </div>
+                    </div>
+                    <span className="material-symbols-outlined text-gray-300 wght-700">chevron_right</span>
+                </button>
+
+                <div className="h-[1px] bg-gray-50 mx-4"></div>
+
                 <button 
                   type="button"
                   onClick={() => navigate('/admin/audit-log')} 
@@ -154,14 +217,14 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                         <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Security Event History</p>
                       </div>
                     </div>
-                    <span className="material-symbols-outlined text-gray-300 font-bold">chevron_right</span>
+                    <span className="material-symbols-outlined text-gray-300 wght-700">chevron_right</span>
                 </button>
 
                 <div className="h-[1px] bg-gray-50 mx-4"></div>
 
                 <button 
                   type="button"
-                  onClick={() => navigate('/admin/email-logic')} 
+                  onClick={() => navigate('/admin/email-config')} 
                   className="w-full p-5 rounded-[2rem] flex items-center justify-between group active:bg-gray-50 active:scale-[0.98] transition-all cursor-pointer"
                 >
                     <div className="flex items-center gap-4 pointer-events-none">
@@ -173,7 +236,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                         <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Triggers & Engagement</p>
                       </div>
                     </div>
-                    <span className="material-symbols-outlined text-gray-300 font-bold">chevron_right</span>
+                    <span className="material-symbols-outlined text-gray-300 wght-700">chevron_right</span>
                 </button>
              </div>
           </div>
@@ -184,7 +247,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
               onClick={onLogout} 
               className="w-full bg-white/50 border-2 border-white p-6 rounded-[2.5rem] flex items-center justify-center gap-4 active:scale-[0.98] transition-all group shadow-soft cursor-pointer"
             >
-                <span className="material-symbols-outlined text-red-500 group-active:scale-110 transition-transform font-bold">logout</span>
+                <span className="material-symbols-outlined text-red-500 group-active:scale-110 transition-transform wght-700">logout</span>
                 <h3 className="text-[13px] text-red-500 font-black uppercase tracking-[0.2em]">Sign Out Console</h3>
             </button>
           </div>
@@ -198,8 +261,12 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
           <span className="text-[9px] font-black uppercase tracking-widest">HOME</span>
         </button>
         <button onClick={() => navigate('/admin/users')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all active:scale-95">
-          <div className="w-12 h-10 flex items-center justify-center"><span className="material-symbols-outlined text-[26px] font-normal">group</span></div>
+          <div className="w-12 h-10 flex items-center justify-center"><span className="material-symbols-outlined text-[26px] wght-700">group</span></div>
           <span className="text-[9px] font-black uppercase tracking-widest">USERS</span>
+        </button>
+        <button onClick={() => navigate('/admin/providers')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all active:scale-95">
+          <div className="w-12 h-10 flex items-center justify-center"><span className="material-symbols-outlined text-[26px] wght-700">storefront</span></div>
+          <span className="text-[9px] font-black uppercase tracking-widest">EXPERTS</span>
         </button>
         <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-30 transition-all active:scale-95">
           <div className="w-12 h-10 flex items-center justify-center"><span className="material-symbols-outlined text-[26px] font-normal">format_list_bulleted</span></div>

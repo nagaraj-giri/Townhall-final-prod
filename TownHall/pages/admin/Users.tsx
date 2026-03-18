@@ -109,7 +109,7 @@ const AdminUsers: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
             <button onClick={() => navigate('/')} className="text-text-dark active:scale-90 transition-transform">
-               <span className="material-symbols-outlined font-bold text-[28px]">arrow_back</span>
+               <span className="material-symbols-outlined wght-700 text-[28px]">arrow_back</span>
             </button>
             <h1 className="text-[26px] font-[900] text-[#333333] tracking-tight uppercase">Directory</h1>
             <div className="flex items-center gap-1.5 px-3 py-1 bg-white border border-gray-100 rounded-full shadow-sm ml-1 h-7">
@@ -126,7 +126,7 @@ const AdminUsers: React.FC = () => {
               onClick={() => setIsCreateModalOpen(true)}
               className="w-11 h-11 bg-primary rounded-full flex items-center justify-center text-white shadow-lg active:scale-95 transition-all"
             >
-              <span className="material-symbols-outlined font-bold text-xl">person_add</span>
+              <span className="material-symbols-outlined wght-700 text-xl">person_add</span>
             </button>
           </div>
         </div>
@@ -244,8 +244,12 @@ const AdminUsers: React.FC = () => {
           <span className="text-[9px] uppercase tracking-[0.2em] font-normal">HOME</span>
         </button>
         <button className="flex-1 flex flex-col items-center gap-1 text-primary">
-          <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[28px] font-normal">group</span></div>
+          <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[28px] wght-700">group</span></div>
           <span className="text-[9px] uppercase tracking-[0.2em] font-normal">USERS</span>
+        </button>
+        <button onClick={() => navigate('/admin/providers')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-30 transition-all">
+          <div className="w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[28px] wght-700">storefront</span></div>
+          <span className="text-[9px] uppercase tracking-[0.2em] font-normal">EXPERTS</span>
         </button>
         <button onClick={() => navigate('/queries')} className="flex-1 flex flex-col items-center gap-1 text-text-light opacity-30 transition-all">
           <div className="w-12 h-10 flex items-center justify-center rounded-2xl"><span className="material-symbols-outlined text-[28px] font-normal">format_list_bulleted</span></div>

@@ -22,7 +22,7 @@ const ProviderDashboard: React.FC<ProviderDashboardProps> = ({ user }) => {
       setMyQuotes(all);
     });
 
-    const unsubRfqs = dataService.listenToRFQs((all) => {
+    const unsubRfqs = dataService.listenToRFQsByStatus(['OPEN', 'ACTIVE', 'ACCEPTED', 'COMPLETED'], (all) => {
       setRfqs(all);
       setIsLoading(false);
     });

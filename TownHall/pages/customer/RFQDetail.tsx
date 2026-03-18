@@ -159,9 +159,21 @@ const RFQDetail: React.FC<RFQDetailProps> = ({ user }) => {
   const handleCancelRfq = async () => {
     if (!rfq) return;
     if (window.confirm("Are you sure you want to cancel this request?")) {
-      await dataService.saveRFQ({ ...rfq, status: 'CANCELED' });
+      await dataService.markRFQAsCanceled(rfq.id);
       showToast("Request canceled", "info");
       navigate('/queries');
+    }
+  };
+
+  const handleRejectBid = async (quote: Quote) => {
+    if (!rfq) return;
+    if (window.confirm(`Reject proposal from ${quote.providerName}?`)) {
+      try {
+        await dataService.markQuoteAsRejected(quote.id);
+        showToast("Proposal rejected", "info");
+      } catch (err) {
+        console.error("Reject bid error:", err);
+      }
     }
   };
 
@@ -187,7 +199,7 @@ const RFQDetail: React.FC<RFQDetailProps> = ({ user }) => {
           <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{rfq.status}</p>
         </div>
         {!isLocked && (
-          <button onClick={handleCancelRfq} className="text-red-500 text-[10px] font-black uppercase tracking-widest">Cancel</button>
+          <button onClick={handleCancelRfq} className="text-red-500 text-[10px] font-black tracking-widest">Cancel</button>
         )}
       </header>
 
@@ -199,8 +211,8 @@ const RFQDetail: React.FC<RFQDetailProps> = ({ user }) => {
                   <div className={`w-2.5 h-2.5 ${isSaturated || isMaxRange ? 'bg-primary' : 'bg-accent-green'} rounded-full ${(isSaturated || isMaxRange) ? '' : 'animate-ping opacity-75'}`}></div>
                   <div className={`absolute w-2 h-2 ${isSaturated || isMaxRange ? 'bg-primary' : 'bg-accent-green'} rounded-full`}></div>
                </div>
-               <span className="text-[10px] font-black text-text-dark uppercase tracking-[0.15em]">
-                 {isSaturated ? 'Saturation Reached' : isHighInterest ? 'High Interest' : rfq.matchingStopped ? 'Discovery Stopped' : 'Discovery Active'}
+               <span className="text-[10px] font-black text-text-dark tracking-[0.15em]">
+                 {isSaturated ? 'Saturation reached' : isHighInterest ? 'High interest' : rfq.matchingStopped ? 'Discovery stopped' : 'Discovery active'}
                </span>
             </div>
             <div className="flex items-center gap-4 flex-1 mx-6">
@@ -218,7 +230,7 @@ const RFQDetail: React.FC<RFQDetailProps> = ({ user }) => {
           <div className="bg-indigo-600 rounded-[2.5rem] p-8 text-white space-y-5 shadow-btn-glow animate-in zoom-in-95">
              <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined font-black">bolt</span>
-                <h3 className="text-sm font-black uppercase tracking-widest">High Velocity Match</h3>
+                <h3 className="text-sm font-black tracking-widest">High velocity match</h3>
              </div>
              <p className="text-xs leading-relaxed opacity-90">
                Your request has triggered significant local interest. We have <b>{quotes.length} experts</b> bidding within 3km. Auto-expansion is paused to let you focus on these local pros.
@@ -228,12 +240,30 @@ const RFQDetail: React.FC<RFQDetailProps> = ({ user }) => {
 
         {!isLocked && (matchingUI.showExpansion8km || matchingUI.showExpansion15km) && !isSaturated && !isHighInterest && (
           <div className="bg-primary rounded-[2.5rem] p-8 text-white space-y-5 shadow-btn-glow animate-in zoom-in-95">
-             <h3 className="text-sm font-black uppercase tracking-widest">Widen Search?</h3>
+             <h3 className="text-sm font-black tracking-widest">Widen search?</h3>
              <p className="text-xs leading-relaxed opacity-90">To get more competitive bids, AIRRA recommends scanning experts within <b>{matchingUI.showExpansion8km ? '8km' : '15km'}</b>.</p>
              <div className="flex gap-3 pt-2">
                 <button onClick={() => handleApproveExpansion(matchingUI.showExpansion8km ? 8 : 15)} className="flex-1 bg-secondary text-text-dark py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg">Approve</button>
-                <button onClick={handleStopMatching} className="flex-1 bg-white/10 border border-white/20 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest">Stay Local</button>
+                <button onClick={handleStopMatching} className="flex-1 bg-white/10 border border-white/20 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest">Stay local</button>
              </div>
+          </div>
+        )}
+
+        {matchingUI.showModifyWarning && !isLocked && quotes.length < 10 && (
+          <div className="bg-white rounded-[2.5rem] p-8 border-2 border-dashed border-primary/20 space-y-5 animate-in slide-in-from-top-4">
+             <div className="flex items-center gap-3 text-primary">
+                <span className="material-symbols-outlined font-black">info</span>
+                <h3 className="text-sm font-black tracking-widest">Optimization tip</h3>
+             </div>
+             <p className="text-[12px] text-gray-500 leading-relaxed font-medium">
+               We've scanned up to 15km but only found <b>{quotes.length} experts</b>. To get more bids, try posting a new query with a different location or more flexible requirements.
+             </p>
+             <button 
+               onClick={() => navigate('/create-rfq', { state: { initialQuery: rfq.title, selectedCategory: rfq.service } })}
+               className="w-full py-4 bg-primary/5 text-primary rounded-2xl text-[10px] font-black tracking-widest border border-primary/10 active:bg-primary/10 transition-all"
+             >
+               Post new query
+             </button>
           </div>
         )}
 
@@ -254,7 +284,7 @@ const RFQDetail: React.FC<RFQDetailProps> = ({ user }) => {
 
         <section className="space-y-4">
            <div className="flex justify-between items-center px-1">
-              <h3 className="text-[12px] font-black text-gray-400 uppercase tracking-widest">Expert Proposals ({quotes.length})</h3>
+              <h3 className="text-[12px] font-black text-gray-400 tracking-widest">Expert proposals ({quotes.length})</h3>
            </div>
            
            {quotes.length > 0 ? (
@@ -282,35 +312,49 @@ const RFQDetail: React.FC<RFQDetailProps> = ({ user }) => {
                           </div>
                           <div className="text-right">
                              <p className="text-lg font-black text-primary leading-none">AED {quote.price}</p>
-                             <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mt-1">Final Bid</p>
+                             <p className="text-[9px] font-bold text-gray-300 tracking-widest mt-1">Final bid</p>
                           </div>
                        </div>
 
                        <div className="flex gap-2">
                           <button 
                             onClick={() => navigate(`/messages/${quote.providerId}`)}
-                            disabled={!!isAccepting}
+                            disabled={!!isAccepting || quote.status === 'REJECTED'}
                             className="flex-1 py-4 bg-[#F2F0F9] text-primary rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 active:bg-[#EBE7F5] disabled:opacity-50"
                           >
                             <span className="material-symbols-outlined text-sm">chat</span>
                             CHAT
                           </button>
 
-                          {isAccepted ? (
+                          {quote.status === 'REJECTED' ? (
+                             <div className="flex-1 py-4 bg-gray-100 text-gray-400 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5">
+                                <span className="material-symbols-outlined text-sm font-black">close</span>
+                                REJECTED
+                             </div>
+                           ) : isAccepted ? (
                             <div className="flex-1 py-4 bg-accent-green/10 text-accent-green rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5">
                                <span className="material-symbols-outlined text-sm font-black">verified</span>
                                ACCEPTED
                             </div>
                           ) : !isLocked ? (
-                            <button 
-                              onClick={() => handleAcceptBid(quote)}
-                              disabled={!!isAccepting}
-                              className="flex-1 py-4 bg-primary text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-btn-glow active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center"
-                            >
-                              {isProcessingAccept ? (
-                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                              ) : 'ACCEPT'}
-                            </button>
+                            <div className="flex-1 flex gap-2">
+                              <button 
+                                onClick={() => handleRejectBid(quote)}
+                                disabled={!!isAccepting}
+                                className="flex-1 py-4 bg-red-50 text-red-500 rounded-2xl text-[10px] font-black uppercase tracking-widest active:bg-red-100 disabled:opacity-50"
+                              >
+                                REJECT
+                              </button>
+                              <button 
+                                onClick={() => handleAcceptBid(quote)}
+                                disabled={!!isAccepting}
+                                className="flex-1 py-4 bg-primary text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-btn-glow active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center"
+                              >
+                                {isProcessingAccept ? (
+                                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                ) : 'ACCEPT'}
+                              </button>
+                            </div>
                           ) : null}
                        </div>
                     </div>
@@ -320,7 +364,7 @@ const RFQDetail: React.FC<RFQDetailProps> = ({ user }) => {
            ) : (
              <div className="py-24 text-center bg-white/40 rounded-[2.5rem] border-2 border-dashed border-gray-100 flex flex-col items-center justify-center gap-4">
                 <span className="material-symbols-outlined text-4xl text-gray-200 animate-pulse">radar</span>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Scanning local experts...</p>
+                <p className="text-[10px] font-black text-gray-400 tracking-widest">Scanning local experts...</p>
              </div>
            )}
         </section>

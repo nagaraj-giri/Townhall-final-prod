@@ -39,8 +39,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
   useEffect(() => {
     const fetchRealStats = async () => {
       try {
-        const quotes = await dataService.getQuotes();
-        const myQuotes = quotes.filter(q => q.providerId === user.id);
+        const myQuotes = await dataService.getQuotesByProviderId(user.id);
         const wins = myQuotes.filter(q => q.status === 'ACCEPTED').length;
         const conv = myQuotes.length > 0 ? Math.round((wins / myQuotes.length) * 100) : 0;
         
@@ -152,11 +151,11 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
       {/* Header */}
       <header className="px-6 pt-12 pb-4 flex items-center justify-between bg-transparent">
         <button onClick={() => navigate('/')} className="w-10 h-10 flex items-center justify-center text-text-dark active:scale-90 transition-transform">
-          <span className="material-symbols-outlined font-black text-2xl">grid_view</span>
+          <span className="material-symbols-outlined wght-700 text-2xl">grid_view</span>
         </button>
         <h1 className="text-[18px] font-black text-text-dark uppercase tracking-tight">Provider Profile</h1>
         <button onClick={() => toggleNotifications(true)} className="relative w-10 h-10 flex items-center justify-center text-text-dark active:scale-90 transition-transform">
-          <span className="material-symbols-outlined text-2xl font-black">notifications</span>
+          <span className="material-symbols-outlined text-2xl wght-700">notifications</span>
           {unreadCount > 0 && <div className="absolute top-2 right-2 w-2.5 h-2.5 bg-accent-pink rounded-full border-2 border-white shadow-sm"></div>}
         </button>
       </header>
@@ -170,7 +169,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
               <div className="absolute bottom-1 right-1 w-5 h-5 bg-accent-green border-[3px] border-white rounded-full shadow-sm"></div>
             </div>
             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10 rounded-[2rem]">
-               <span className="material-symbols-outlined text-white text-2xl">photo_camera</span>
+               <span className="material-symbols-outlined text-white text-2xl wght-700">photo_camera</span>
             </div>
             <input type="file" ref={avatarInputRef} className="hidden" accept="image/*" onChange={handleAvatarUpload} />
           </div>
@@ -196,7 +195,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
               onClick={() => isEditing ? handleSave() : setIsEditing(true)}
               className="absolute top-1/2 -right-4 -translate-y-1/2 w-12 h-12 bg-primary rounded-full shadow-xl flex items-center justify-center text-white active:scale-95 transition-all"
             >
-              <span className="material-symbols-outlined text-xl">{isEditing ? 'check' : 'edit'}</span>
+              <span className="material-symbols-outlined text-xl wght-700">{isEditing ? 'check' : 'edit'}</span>
             </button>
           </div>
         </div>
@@ -294,7 +293,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                 disabled={isUploadingGallery}
                 className="text-[11px] font-black text-primary uppercase tracking-widest flex items-center gap-1.5"
               >
-                <span className="material-symbols-outlined text-[18px]">{isUploadingGallery ? 'sync' : 'add_a_photo'}</span>
+                <span className="material-symbols-outlined text-[18px] wght-700">{isUploadingGallery ? 'sync' : 'add_a_photo'}</span>
                 {isUploadingGallery ? 'UPLOADING...' : 'ADD PHOTO'}
               </button>
               <input type="file" ref={galleryInputRef} className="hidden" accept="image/*" onChange={handleAddGalleryPhoto} />
@@ -308,7 +307,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                         onClick={() => handleRemoveGalleryPhoto(url)}
                         className="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
                       >
-                         <span className="material-symbols-outlined text-[14px] font-black">close</span>
+                         <span className="material-symbols-outlined text-[14px] wght-900">close</span>
                       </button>
                    </div>
                  ))}
@@ -347,7 +346,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                        {categories.map(tag => (
                          <span key={tag} className="bg-[#EBE7F5] text-primary text-[11px] font-black px-4 py-2 rounded-xl flex items-center gap-2 shadow-sm animate-in zoom-in-95">
                            {tag}
-                           <button onClick={() => removeTag(tag)} className="material-symbols-outlined text-[16px] font-black opacity-40 hover:opacity-100 transition-opacity">close</button>
+                           <button onClick={() => removeTag(tag)} className="material-symbols-outlined text-[16px] wght-900 opacity-40 hover:opacity-100 transition-opacity">close</button>
                          </span>
                        ))}
                     </div>
@@ -362,7 +361,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
                          onKeyPress={e => e.key === 'Enter' && addTag()}
                        />
                        <button onClick={addTag} className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white shadow-lg active:scale-90 transition-transform">
-                          <span className="material-symbols-outlined text-lg font-black">add</span>
+                          <span className="material-symbols-outlined text-lg wght-900">add</span>
                        </button>
                     </div>
                  </div>
@@ -384,7 +383,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
            <div className="bg-white rounded-[2.5rem] p-8 shadow-soft border border-white space-y-6">
               <div className="flex items-start gap-5">
                  <div className="w-14 h-14 rounded-2xl bg-primary/5 flex items-center justify-center text-primary shrink-0">
-                    <span className="material-symbols-outlined text-3xl">notifications_active</span>
+                    <span className="material-symbols-outlined text-3xl wght-700">notifications_active</span>
                  </div>
                  <div className="flex-1">
                     <p className="text-[15px] font-black text-text-dark uppercase tracking-tight">Real-time Lead Alerts</p>
@@ -421,7 +420,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
             onClick={onLogout}
             className="w-full py-5 bg-white border border-red-50 text-red-500 font-black text-[11px] uppercase tracking-[0.3em] rounded-[2.5rem] shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-3"
           >
-            <span className="material-symbols-outlined text-[18px] font-black">logout</span>
+            <span className="material-symbols-outlined text-[18px] wght-900">logout</span>
             Sign Out Session
           </button>
         </div>
@@ -430,21 +429,21 @@ const Profile: React.FC<ProfileProps> = ({ user, onLogout, onUpdateUser }) => {
       {/* Navigation Footer */}
       <nav className="fixed bottom-0 left-0 right-0 w-full max-w-md mx-auto bg-white/95 backdrop-blur-md border-t border-gray-100 pb-10 pt-4 px-6 flex justify-around items-center z-50 shadow-[0_-15px_40px_rgba(0,0,0,0.04)]">
         <button onClick={() => navigate('/')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-60">
-          <span className="material-symbols-outlined text-[28px] font-normal">home</span>
+          <span className="material-symbols-outlined text-[28px] wght-700">home</span>
           <span className="text-[9px] font-bold uppercase tracking-widest">Home</span>
         </button>
         <button onClick={() => navigate('/leads')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light opacity-60">
-          <span className="material-symbols-outlined text-[28px] font-normal">grid_view</span>
+          <span className="material-symbols-outlined text-[28px] wght-700">grid_view</span>
           <span className="text-[9px] font-bold uppercase tracking-widest">Leads</span>
         </button>
         <button onClick={() => navigate('/messages')} className="flex-1 flex flex-col items-center gap-1.5 text-text-light relative opacity-60">
-          <span className="material-symbols-outlined text-[28px] font-normal">chat_bubble</span>
+          <span className="material-symbols-outlined text-[28px] wght-700">chat_bubble</span>
           {chatUnreadCount > 0 && <div className="absolute top-0 right-3 w-4 h-4 bg-accent-pink rounded-full border-2 border-white text-[8px] font-normal text-white flex items-center justify-center">{chatUnreadCount > 9 ? '9+' : chatUnreadCount}</div>}
           <span className="text-[9px] font-bold uppercase tracking-widest">Chat</span>
         </button>
         <button className="flex-1 flex flex-col items-center gap-1 text-primary">
           <div className="bg-primary/10 w-12 h-10 flex items-center justify-center rounded-xl">
-             <span className="material-symbols-outlined text-[28px] font-normal">person</span>
+             <span className="material-symbols-outlined text-[28px] wght-700">person</span>
           </div>
           <span className="text-[9px] font-bold uppercase tracking-widest">Profile</span>
         </button>

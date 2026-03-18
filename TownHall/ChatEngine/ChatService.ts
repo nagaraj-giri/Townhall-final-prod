@@ -1,5 +1,5 @@
 // @ts-ignore
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, onSnapshot, orderBy, writeBatch, increment } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, onSnapshot, orderBy, writeBatch, increment, serverTimestamp } from "firebase/firestore";
 // @ts-ignore
 import type { Unsubscribe } from "firebase/firestore";
 import { db } from "../services/firebase";
@@ -99,14 +99,14 @@ export const ChatService = {
           rfqId: rfqId || null,
           participants: [msg.senderId, recipientId], 
           lastMessage: lastText, 
-          lastTimestamp: msg.timestamp, 
+          lastTimestamp: serverTimestamp(), 
           unreadCount: { [recipientId]: 1, [msg.senderId]: 0 },
           typing: { [msg.senderId]: false, [recipientId]: false }
         });
       } else {
         await updateDoc(roomRef, { 
           lastMessage: lastText, 
-          lastTimestamp: msg.timestamp, 
+          lastTimestamp: serverTimestamp(), 
           [`unreadCount.${recipientId}`]: increment(1) 
         });
       }

@@ -1,5 +1,5 @@
 // @ts-ignore
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, onSnapshot, orderBy, writeBatch, increment, limit, addDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, onSnapshot, orderBy, writeBatch, increment, limit, addDoc, serverTimestamp, getCountFromServer } from "firebase/firestore";
 // @ts-ignore
 import type { Unsubscribe } from "firebase/firestore";
 // @ts-ignore
@@ -57,6 +57,12 @@ export const dataService = {
     return snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as RFQ));
   },
 
+  getRFQsByCustomerId: async (customerId: string): Promise<RFQ[]> => {
+    const q = query(collection(db, COLLECTIONS.RFQS), where('customerId', '==', customerId));
+    const snap = await getDocs(q);
+    return snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as RFQ));
+  },
+
   getRFQById: async (id: string): Promise<RFQ | null> => {
     const snap = await getDoc(doc(db, COLLECTIONS.RFQS, id));
     return snap.exists() ? ({ ...snap.data(), id: snap.id } as RFQ) : null;
@@ -64,11 +70,30 @@ export const dataService = {
 
   listenToRFQs: (callback: (rfqs: RFQ[]) => void): Unsubscribe => {
     const q = query(collection(db, COLLECTIONS.RFQS), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as RFQ))));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as RFQ))), (err) => console.error("Listen RFQs error:", err));
+  },
+
+  listenToRFQsByCustomerId: (customerId: string, callback: (rfqs: RFQ[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.RFQS), where('customerId', '==', customerId), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as RFQ))), (err) => {
+      console.error("Listen RFQs by Customer error:", err);
+      // Fallback to non-ordered query if index is missing
+      const fallbackQ = query(collection(db, COLLECTIONS.RFQS), where('customerId', '==', customerId));
+      onSnapshot(fallbackQ, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as RFQ)).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())));
+    });
   },
 
   listenToRFQById: (id: string, callback: (rfq: RFQ | null) => void): Unsubscribe => {
     return onSnapshot(doc(db, COLLECTIONS.RFQS, id), (s) => callback(s.exists() ? { ...s.data(), id: s.id } as RFQ : null));
+  },
+
+  listenToRFQsByStatus: (statuses: string[], callback: (rfqs: RFQ[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.RFQS), where('status', 'in', statuses), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as RFQ))), (err) => {
+      console.error("Listen RFQs by Status error:", err);
+      const fallbackQ = query(collection(db, COLLECTIONS.RFQS), where('status', 'in', statuses));
+      onSnapshot(fallbackQ, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as RFQ)).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())));
+    });
   },
 
   listenToRFQMatches: (rfqId: string, callback: (matches: any[]) => void): Unsubscribe => {
@@ -88,6 +113,12 @@ export const dataService = {
 
   getQuotes: async (): Promise<Quote[]> => {
     const snap = await getDocs(collection(db, COLLECTIONS.QUOTES));
+    return snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as Quote));
+  },
+
+  getQuotesByProviderId: async (providerId: string): Promise<Quote[]> => {
+    const q = query(collection(db, COLLECTIONS.QUOTES), where('providerId', '==', providerId));
+    const snap = await getDocs(q);
     return snap.docs.map(doc => ({ ...doc.data(), id: doc.id } as Quote));
   },
 
@@ -112,8 +143,16 @@ export const dataService = {
     await batch.commit();
   },
 
+  markQuoteAsRejected: async (quoteId: string) => {
+    await updateDoc(doc(db, COLLECTIONS.QUOTES, quoteId), { status: 'REJECTED' });
+  },
+
   markRFQCompleted: async (rfqId: string) => {
     await updateDoc(doc(db, COLLECTIONS.RFQS, rfqId), { status: 'COMPLETED' });
+  },
+
+  markRFQAsCanceled: async (rfqId: string) => {
+    await updateDoc(doc(db, COLLECTIONS.RFQS, rfqId), { status: 'CANCELED' });
   },
 
   getUserById: async (id: string): Promise<User | null> => {
@@ -123,6 +162,45 @@ export const dataService = {
 
   listenToUserById: (id: string, callback: (user: User | null) => void): Unsubscribe => {
     return onSnapshot(doc(db, COLLECTIONS.USERS, id), (s) => callback(s.exists() ? ({ ...s.data(), id: s.id } as User) : null));
+  },
+
+  getMarketplaceStats: async () => {
+    const usersColl = collection(db, COLLECTIONS.USERS);
+    const rfqsColl = collection(db, COLLECTIONS.RFQS);
+    const quotesColl = collection(db, COLLECTIONS.QUOTES);
+    
+    const [userCount, rfqCount, quoteCount] = await Promise.all([
+      getCountFromServer(usersColl),
+      getCountFromServer(rfqsColl),
+      getCountFromServer(quotesColl)
+    ]);
+    
+    return {
+      totalUsers: userCount.data().count,
+      totalRFQs: rfqCount.data().count,
+      totalQuotes: quoteCount.data().count
+    };
+  },
+
+  getRFQStatusCounts: async () => {
+    const coll = collection(db, COLLECTIONS.RFQS);
+    const statuses = ['OPEN', 'ACTIVE', 'ACCEPTED', 'COMPLETED', 'CANCELED'];
+    const counts = await Promise.all(statuses.map(s => getCountFromServer(query(coll, where('status', '==', s)))));
+    const result: Record<string, number> = {};
+    statuses.forEach((s, i) => {
+      result[s.toLowerCase()] = counts[i].data().count;
+    });
+    return result;
+  },
+
+  getUserRoleCounts: async () => {
+    const coll = collection(db, COLLECTIONS.USERS);
+    const roles = [UserRole.CUSTOMER, UserRole.PROVIDER];
+    const counts = await Promise.all(roles.map(r => getCountFromServer(query(coll, where('role', '==', r)))));
+    return {
+      customers: counts[0].data().count,
+      providers: counts[1].data().count
+    };
   },
 
   getUsers: async (): Promise<User[]> => {
@@ -153,6 +231,11 @@ export const dataService = {
     return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as AuditLogEntry))));
   },
 
+  listenToAuditLogsByEventId: (eventId: string, callback: (logs: AuditLogEntry[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.AUDIT_LOGS), where('eventId', '==', eventId), orderBy('timestamp', 'desc'), limit(10));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as AuditLogEntry))));
+  },
+
   listenToNotifications: (userId: string, callback: (notifs: AppNotification[]) => void): Unsubscribe => {
     const q = query(collection(db, COLLECTIONS.NOTIFS), where('userId', '==', userId), orderBy('timestamp', 'desc'), limit(50));
     return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as AppNotification))));
@@ -172,7 +255,17 @@ export const dataService = {
 
   createNotification: async (userId: string, title: string, message: string, type: 'INFO' | 'SUCCESS' | 'WARNING' | 'URGENT', targetRole?: UserRole, actionUrl?: string) => {
     const id = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const notif: AppNotification = { id, userId, title, message, timestamp: new Date().toISOString(), isRead: false, type, targetRole, actionUrl };
+    const notif: any = { 
+      id, 
+      userId, 
+      title, 
+      message, 
+      timestamp: serverTimestamp(), 
+      isRead: false, 
+      type, 
+      targetRole, 
+      actionUrl 
+    };
     await setDoc(doc(db, COLLECTIONS.NOTIFS, id), notif);
   },
 
@@ -236,6 +329,15 @@ export const dataService = {
   listenToReviewsByProvider: (providerId: string, callback: (reviews: Review[]) => void): Unsubscribe => {
     const q = query(collection(db, COLLECTIONS.REVIEWS), where('providerId', '==', providerId), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as Review))));
+  },
+
+  listenToAllQuotes: (callback: (quotes: Quote[]) => void): Unsubscribe => {
+    const q = query(collection(db, COLLECTIONS.QUOTES), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (s) => callback(s.docs.map(d => ({ ...d.data(), id: d.id } as Quote))));
+  },
+
+  deleteQuote: async (id: string) => {
+    await deleteDoc(doc(db, COLLECTIONS.QUOTES, id));
   },
 
   getReviews: async (providerId: string): Promise<Review[]> => {

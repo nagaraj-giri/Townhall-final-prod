@@ -16,12 +16,8 @@ const Dashboard: React.FC<{ user: User }> = ({ user }) => {
     const unsubCats = dataService.listenToCategories((cats) => {
       setCategories(cats.filter(c => c.isActive !== false));
     });
-    const unsubRfqs = dataService.listenToRFQs((all) => {
-      const myRfqs = all
-        .filter(r => r.customerId === user.id)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 5);
-      setRecentRfqs(myRfqs);
+    const unsubRfqs = dataService.listenToRFQsByCustomerId(user.id, (myRfqs) => {
+      setRecentRfqs(myRfqs.slice(0, 5));
       setIsLoading(false);
     });
     return () => { unsubCats(); unsubRfqs(); };

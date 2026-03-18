@@ -29,6 +29,7 @@ const ProviderRegistration = lazy(() => import('./pages/ProviderRegistration'));
 const AdminDashboard = lazy(() => import('./pages/admin/Dashboard'));
 const AdminProfile = lazy(() => import('./pages/admin/Profile'));
 const AdminUsers = lazy(() => import('./pages/admin/Users'));
+const AdminProviders = lazy(() => import('./pages/admin/Providers'));
 const AdminUserDetails = lazy(() => import('./pages/admin/UserDetails'));
 const AdminRFQDetail = lazy(() => import('./pages/admin/RFQDetail'));
 const AdminSiteSettings = lazy(() => import('./pages/admin/SiteSettings'));
@@ -36,7 +37,7 @@ const AdminAuditLog = lazy(() => import('./pages/admin/AuditLog'));
 const AdminAuditLogDetail = lazy(() => import('./pages/admin/AuditLogDetail'));
 const AdminBroadcastManager = lazy(() => import('./pages/admin/BroadcastManager'));
 const AdminBroadcastListing = lazy(() => import('./pages/admin/BroadcastListing'));
-const AdminProviderRequests = lazy(() => import('./pages/admin/AdminProviderRequests'));
+const AdminModerationHub = lazy(() => import('./pages/admin/ModerationHub'));
 const AdminCategories = lazy(() => import('./pages/admin/Categories'));
 const AdminServiceEditor = lazy(() => import('./pages/admin/ServiceEditor'));
 const AdminEmailConfig = lazy(() => import('./pages/admin/EmailConfig'));
@@ -106,7 +107,15 @@ const NotificationTray: React.FC<{ isOpen: boolean; onClose: () => void; notific
                 <div className="min-w-0 flex-1">
                   <h4 className={`text-[14px] font-black text-text-dark truncate uppercase tracking-tight ${n.isRead ? 'opacity-50' : ''}`}>{n.title}</h4>
                   <p className="text-[12px] text-gray-500 leading-relaxed font-normal line-clamp-2">{n.message}</p>
-                  <p className="text-[9px] font-normal text-gray-300 uppercase mt-3 tracking-widest">{new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  <p className="text-[9px] font-normal text-gray-300 uppercase mt-3 tracking-widest">
+                    {(() => {
+                      if (!n.timestamp) return 'Just now';
+                      // @ts-ignore
+                      const date = n.timestamp.seconds ? new Date(n.timestamp.seconds * 1000) : new Date(n.timestamp);
+                      if (isNaN(date.getTime())) return 'Just now';
+                      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    })()}
+                  </p>
                 </div>
               </div>
             </div>
@@ -206,7 +215,9 @@ const App: React.FC = () => {
                 <Route path="/rfq/:id" element={user ? (user.role === UserRole.PROVIDER ? <ProviderRFQDetail user={user} /> : user.role === UserRole.ADMIN ? <AdminRFQDetail user={user} /> : <CustomerRFQDetail user={user} />) : <Navigate to="/login" />} />
                 <Route path="/storefront/:id?" element={user ? <ProviderStorefront user={user!} /> : <Navigate to="/login" />} />
                 <Route path="/admin/users" element={user?.role === UserRole.ADMIN ? <AdminUsers /> : <Navigate to="/" />} />
-                <Route path="/admin/requests" element={user?.role === UserRole.ADMIN ? <AdminProviderRequests /> : <Navigate to="/" />} />
+                <Route path="/admin/providers" element={user?.role === UserRole.ADMIN ? <AdminProviders /> : <Navigate to="/" />} />
+                <Route path="/admin/requests" element={user?.role === UserRole.ADMIN ? <AdminModerationHub /> : <Navigate to="/" />} />
+                <Route path="/admin/moderation" element={user?.role === UserRole.ADMIN ? <AdminModerationHub /> : <Navigate to="/" />} />
                 <Route path="/admin/audit-log" element={user?.role === UserRole.ADMIN ? <AdminAuditLog /> : <Navigate to="/" />} />
                 <Route path="/admin/audit-log/:id" element={user?.role === UserRole.ADMIN ? <AdminAuditLogDetail /> : <Navigate to="/" />} />
                 <Route path="/admin/broadcast" element={user?.role === UserRole.ADMIN ? <AdminBroadcastManager user={user!} /> : <Navigate to="/" />} />
